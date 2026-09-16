@@ -1,4 +1,5 @@
 import copy
+import hashlib
 import json
 import math
 import sys
@@ -13,10 +14,14 @@ from axm_animal_design.uc_bridge import (
     SOURCE_COORDINATES,
     TARGET_COORDINATES,
     adapt_form_evidence_for_uc,
+    adapt_geometry_candidate_for_uc,
     build_bridge_evidence,
+    build_candidate_source_primitive,
+    require_candidate_identity,
 )
 
 SPEC = json.loads((ROOT / "examples/quadruped_neutral_001.json").read_text())
+NEUTRAL_MATERIAL = {"base_color": [0.72, 0.72, 0.70, 1.0], "metallic": 0.0, "roughness": 0.78}
 
 
 def _cross(a, b):
@@ -33,6 +38,11 @@ def _sub(a, b):
 
 def _dot(a, b):
     return sum(a[i] * b[i] for i in range(3))
+
+
+def _digest(value):
+    body = json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
+    return hashlib.sha256(body).hexdigest()
 
 
 class UCSurfaceBridgeTests(unittest.TestCase):
@@ -91,6 +101,52 @@ class UCSurfaceBridgeTests(unittest.TestCase):
         self.assertTrue(receipt["bridge"]["handedness_change"])
         self.assertTrue(receipt["bridge"]["triangle_winding_reversed"])
         self.assertIn("does not prove visual quality", receipt["truth"])
+
+    def test_geometry_candidate_gets_transport_only_normals_and_exact_uc_mapping(self):
+        candidate = {
+            "id": "connected-test",
+            "positions": [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]],
+            "indices": [0, 1, 2],
+        }
+        before = copy.deepcopy(candidate)
+        primitive = build_candidate_source_primitive(candidate, material=NEUTRAL_MATERIAL)
+        self.assertEqual(candidate, before)
+        self.assertEqual(len(primitive["normals"]), 3)
+        self.assertEqual(primitive["normals"], [[0.0, 0.0, 1.0]] * 3)
+        self.assertEqual(primitive["colors"], [NEUTRAL_MATERIAL["base_color"]] * 3)
+
+        surface = adapt_geometry_candidate_for_uc(
+            candidate,
+            name="connected candidate transport",
+            material=NEUTRAL_MATERIAL,
+        )
+        group = surface["primitives"][0]
+        self.assertEqual(group["positions"], [[-0.0, 0.0, 0.0], [-0.0, 0.0, 1.0], [-1.0, 0.0, 0.0]])
+        self.assertEqual(group["indices"], [0, 2, 1])
+        self.assertEqual(group["normals"], [[-0.0, 1.0, 0.0]] * 3)
+        self.assertEqual(group["material"]["color"], "#B8B8B3FF")
+
+    def test_geometry_candidate_identity_fails_closed_on_position_drift(self):
+        candidate = {
+            "id": "connected-test",
+            "positions": [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]],
+            "indices": [0, 1, 2],
+        }
+        expected = _digest(candidate)
+        self.assertEqual(require_candidate_identity(candidate, expected), expected)
+        drifted = copy.deepcopy(candidate)
+        drifted["positions"][0][0] = 0.001
+        with self.assertRaisesRegex(ValueError, "geometry candidate identity drift"):
+            require_candidate_identity(drifted, expected)
+
+    def test_transport_normal_builder_rejects_degenerate_candidate(self):
+        candidate = {
+            "id": "degenerate",
+            "positions": [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [2.0, 0.0, 0.0]],
+            "indices": [0, 1, 2],
+        }
+        with self.assertRaisesRegex(ValueError, "degenerate triangle"):
+            build_candidate_source_primitive(candidate, material=NEUTRAL_MATERIAL)
 
 
 if __name__ == "__main__":
