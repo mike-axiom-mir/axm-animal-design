@@ -10,6 +10,7 @@
       "child_landmark": "wrist_L",
       "parent_region": "front_upper_L",
       "child_region": "front_lower_L",
+      "downstream_regions": ["front_paw_L"],
       "axis": [0.0, 1.0, 0.0],
       "influence_radius": 0.11,
       "pose_angles_deg": [-60.0, 0.0, 60.0]
@@ -21,6 +22,7 @@
       "child_landmark": "wrist_R",
       "parent_region": "front_upper_R",
       "child_region": "front_lower_R",
+      "downstream_regions": ["front_paw_R"],
       "axis": [0.0, 1.0, 0.0],
       "influence_radius": 0.11,
       "pose_angles_deg": [-60.0, 0.0, 60.0]
@@ -32,6 +34,7 @@
       "child_landmark": "ankle_L",
       "parent_region": "rear_upper_L",
       "child_region": "rear_lower_L",
+      "downstream_regions": ["rear_paw_L"],
       "axis": [0.0, 1.0, 0.0],
       "influence_radius": 0.12,
       "pose_angles_deg": [-60.0, 0.0, 60.0]
@@ -43,6 +46,7 @@
       "child_landmark": "ankle_R",
       "parent_region": "rear_upper_R",
       "child_region": "rear_lower_R",
+      "downstream_regions": ["rear_paw_R"],
       "axis": [0.0, 1.0, 0.0],
       "influence_radius": 0.12,
       "pose_angles_deg": [-60.0, 0.0, 60.0]
