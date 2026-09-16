@@ -17,6 +17,16 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
       - name: Compile
-        run: python -m compileall -q src tests
+        run: python -m compileall -q src tests tools
       - name: Unit tests
         run: python -m unittest discover -s tests -v
+      - name: Build exact organic-form evidence
+        if: matrix.python-version == '3.11'
+        run: python tools/build_baseline.py
+      - name: Upload organic-form evidence
+        if: matrix.python-version == '3.11'
+        uses: actions/upload-artifact@v4
+        with:
+          name: quadruped-neutral-001-evidence
+          path: evidence/
+          if-no-files-found: error
