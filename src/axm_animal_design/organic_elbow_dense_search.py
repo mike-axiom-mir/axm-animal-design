@@ -1,9 +1,9 @@
 """Bounded parameter-neighborhood search for the Animal elbow review form.
 
-This module does not adopt a form. It evaluates a small, declared neighborhood
-around the existing balanced Organic candidate after the dense sweep exposed a
-single tiny minimum-area regression. Selection is structural only and remains a
-review handoff to Art Direction / Visual QA and source ownership.
+The search changes no source-owned data. It evaluates only the exact elbow-ring
+review transform around the existing balanced candidate after a denser pose
+sweep exposed one tiny minimum-area regression. Any selected result is a
+structural review candidate only; visual and source adoption remain held.
 """
 from __future__ import annotations
 
@@ -11,13 +11,22 @@ from copy import deepcopy
 import math
 from typing import Any
 
-from .connected_deformation import _build_exact_candidate, _dot, _mul, _select_joint, _sub, _unit, digest
+from .connected_deformation import (
+    _build_exact_candidate,
+    _dot,
+    _mul,
+    _select_joint,
+    _sub,
+    _unit,
+    digest,
+)
 from .organic_elbow_relief import _bounds, _ring_indices
 from .organic_elbow_balanced_relief import (
     BASELINE_CANDIDATE_DIGEST,
     CANDIDATE_DIGEST,
     RIG_PLAN_DIGEST,
     SOURCE_DIGEST,
+    build_balanced_elbow_candidate,
 )
 from .organic_elbow_balanced_sweep import (
     POSE_SCHEDULE_DEG,
@@ -38,8 +47,8 @@ CURRENT_AXIS_SCALE = 1.03
 
 def _bound_delta(before, after):
     return [
-        [round(after[axis][side] - before[axis][side], 12) for side in range(2)]
-        for axis in range(3)
+        [round(after[a][side] - before[a][side], 12) for side in range(2)]
+        for a in range(3)
     ]
 
 
@@ -63,7 +72,7 @@ def build_search_variant(
         raise ValueError("baseline connected candidate identity drift")
     joint = _select_joint(spec, plan)
     axis = _unit(tuple(float(v) for v in joint["axis"]), "joint axis")
-    if tuple(round(value, 12) for value in axis) != (0.0, 1.0, 0.0):
+    if tuple(round(v, 12) for v in axis) != (0.0, 1.0, 0.0):
         raise ValueError("search remains bound to exact +Y elbow axis")
     if abs(float(radius_derivation["radii_m"][1]) - NOMINAL_ELBOW_RADIUS_M) > 1e-12:
         raise ValueError("source-derived elbow radius drift")
@@ -76,10 +85,10 @@ def build_search_variant(
     ring = _ring_indices(candidate, 1)
     joint_position = tuple(float(v) for v in spec["landmarks"][joint["landmark"]])
     bend_ratio = bend_plane_radius_m / NOMINAL_ELBOW_RADIUS_M
-    baseline_positions = [tuple(point) for point in baseline["positions"]]
-    candidate_positions = [list(point) for point in baseline["positions"]]
+    before_positions = [tuple(point) for point in baseline["positions"]]
+    after_positions = [list(point) for point in baseline["positions"]]
     for vertex_index in ring:
-        point = baseline_positions[vertex_index]
+        point = before_positions[vertex_index]
         relative = _sub(point, joint_position)
         parallel = _mul(axis, _dot(relative, axis))
         perpendicular = _sub(relative, parallel)
@@ -89,8 +98,8 @@ def build_search_variant(
             + perpendicular[i] * bend_ratio
             for i in range(3)
         )
-        candidate_positions[vertex_index] = [round(value, 9) for value in adjusted]
-    candidate["positions"] = candidate_positions
+        after_positions[vertex_index] = [round(value, 9) for value in adjusted]
+    candidate["positions"] = after_positions
     candidate["organic_search_review"] = {
         "schema": SEARCH_SCHEMA,
         "bend_plane_radius_m": bend_plane_radius_m,
@@ -102,7 +111,7 @@ def build_search_variant(
 
     moved = [
         index
-        for index, (before, after) in enumerate(zip(baseline_positions, candidate_positions))
+        for index, (before, after) in enumerate(zip(before_positions, after_positions))
         if math.dist(before, after) > 1e-12
     ]
     if moved != ring:
@@ -112,23 +121,25 @@ def build_search_variant(
     if baseline["radii"] != candidate["radii"]:
         raise ValueError("search variant silently rewrote nominal source-derived radii")
 
-    before_bounds = _bounds(baseline_positions)
-    after_bounds = _bounds([tuple(point) for point in candidate_positions])
+    before_bounds = _bounds(before_positions)
+    after_bounds = _bounds([tuple(point) for point in after_positions])
     delta = _bound_delta(before_bounds, after_bounds)
-    max_bound_expansion = max(max(0.0, value) for axis_delta in delta for value in axis_delta)
-    max_neutral_delta = max(
-        math.dist(baseline_positions[index], candidate_positions[index]) for index in moved
-    )
+    max_expansion = max(max(0.0, value) for axis_delta in delta for value in axis_delta)
+    max_delta = max(math.dist(before_positions[i], after_positions[i]) for i in moved)
     scope = {
         "moved_vertex_indices": moved,
         "moved_vertex_count": len(moved),
-        "maximum_neutral_vertex_delta_m": round(max_neutral_delta, 12),
-        "maximum_positive_bound_expansion_m": round(max_bound_expansion, 12),
+        "maximum_neutral_vertex_delta_m": round(max_delta, 12),
+        "maximum_positive_bound_expansion_m": round(max_expansion, 12),
         "bounds_delta_m": delta,
-        "within_neutral_delta_bound": max_neutral_delta <= MAX_NEUTRAL_VERTEX_DELTA_M + 1e-12,
-        "within_positive_bound_expansion": max_bound_expansion <= MAX_POSITIVE_BOUND_EXPANSION_M + 1e-12,
+        "within_neutral_delta_bound": max_delta <= MAX_NEUTRAL_VERTEX_DELTA_M + 1e-12,
+        "within_positive_bound_expansion": max_expansion <= MAX_POSITIVE_BOUND_EXPANSION_M + 1e-12,
     }
     return candidate, scope
+
+
+def _same_geometry(a: dict[str, Any], b: dict[str, Any]) -> bool:
+    return all(a[key] == b[key] for key in ("positions", "indices", "path_points", "radii"))
 
 
 def inspect_parameter_search(spec: dict[str, Any], plan: dict[str, Any]) -> dict[str, Any]:
@@ -138,6 +149,7 @@ def inspect_parameter_search(spec: dict[str, Any], plan: dict[str, Any]) -> dict
         raise ValueError("rig plan identity drift")
 
     baseline, _ = _build_exact_candidate(spec)
+    exact_balanced, _ = build_balanced_elbow_candidate(spec, plan)
     baseline_probes = {
         profile: _probe_dense_candidate(baseline, spec, plan, profile)
         for profile in WEIGHTING_PROFILES
@@ -180,15 +192,8 @@ def inspect_parameter_search(spec: dict[str, Any], plan: dict[str, Any]) -> dict
                             metric["balanced_min_edge_gain_vs_baseline"],
                             metric["balanced_max_edge_reduction_vs_baseline"],
                         )
-                    per_sample.append(
-                        {
-                            "weighting": profile,
-                            "angle_deg": angle,
-                            **metric,
-                        }
-                    )
+                    per_sample.append({"weighting": profile, "angle_deg": angle, **metric})
             bounded = scope["within_neutral_delta_bound"] and scope["within_positive_bound_expansion"]
-            eligible = structural and directional and bounded
             rows.append(
                 {
                     "bend_plane_radius_m": radius,
@@ -198,7 +203,7 @@ def inspect_parameter_search(spec: dict[str, Any], plan: dict[str, Any]) -> dict
                     "structural_all_samples": structural,
                     "directionally_nonworse_all_samples": directional,
                     "bounded_neutral_form": bounded,
-                    "eligible_structural_successor": eligible,
+                    "eligible_structural_successor": structural and directional and bounded,
                     "minimum_nonzero_area_margin": round(min_area_nonzero, 12),
                     "minimum_nonzero_edge_margin": round(min_edge_nonzero, 12),
                     "samples": per_sample,
@@ -211,8 +216,12 @@ def inspect_parameter_search(spec: dict[str, Any], plan: dict[str, Any]) -> dict
         if row["bend_plane_radius_m"] == CURRENT_RADIUS_M
         and row["joint_axis_width_scale"] == CURRENT_AXIS_SCALE
     )
-    if control["candidate_digest"] != CANDIDATE_DIGEST:
-        raise ValueError("parameter search failed to reproduce exact balanced candidate")
+    control_candidate, _ = build_search_variant(spec, plan, CURRENT_RADIUS_M, CURRENT_AXIS_SCALE)
+    control_geometry_match = _same_geometry(control_candidate, exact_balanced)
+    if not control_geometry_match:
+        raise ValueError("parameter search control geometry diverges from exact balanced candidate")
+    if digest(exact_balanced) != CANDIDATE_DIGEST:
+        raise ValueError("exact balanced candidate identity drift")
 
     eligible = [row for row in rows if row["eligible_structural_successor"]]
     selected = None
@@ -240,6 +249,7 @@ def inspect_parameter_search(spec: dict[str, Any], plan: dict[str, Any]) -> dict
         "rig_plan_digest": RIG_PLAN_DIGEST,
         "baseline_candidate_digest": BASELINE_CANDIDATE_DIGEST,
         "current_balanced_candidate_digest": CANDIDATE_DIGEST,
+        "current_control_geometry_matches_exact_balanced": control_geometry_match,
         "pose_schedule_deg": list(POSE_SCHEDULE_DEG),
         "weighting_profiles": list(WEIGHTING_PROFILES),
         "grid": {
@@ -262,6 +272,7 @@ def inspect_parameter_search(spec: dict[str, Any], plan: dict[str, Any]) -> dict
         "truth_boundary": [
             "the search is restricted to one exact elbow ring and a declared small parameter neighborhood",
             "the exact source, rig plan, topology, path points, nominal radii and all vertices outside the elbow ring remain unchanged",
+            "the current-control geometry is checked directly against the exact prior balanced candidate; whole-object digests are intentionally different because search metadata is evidence-only",
             "a selected structural successor is not anatomy, biology, visual approval, source adoption, Rigging acceptance, Animation, runtime, gameplay, CANON or production readiness",
         ],
     }
