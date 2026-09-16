@@ -204,3 +204,75 @@ jobs:
           name: quadruped-source-successor-current-uc-clock-bridge-evidence
           path: evidence/uc_source_successor_animation_clock/
           if-no-files-found: error
+
+  animal-source-successor-current-uc-surface-bridge:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout exact Technical Art head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Checkout exact source-successor Geometry producer
+        uses: actions/checkout@v4
+        with:
+          repository: mike-axiom-mir/axm-animal-design
+          ref: eb5ce99798b646b6ab9705c0c914b898173f7cc1
+          path: .animal-geometry-source-successor
+      - name: Checkout exact UC topology observer required by Geometry producer
+        uses: actions/checkout@v4
+        with:
+          repository: mike-axiom-mir/axm-universal-creation
+          ref: b434a349cf159b392148b4dc9d68146573531a60
+          path: .uc-topology-donor
+      - name: Checkout previous proven UC surface pin
+        uses: actions/checkout@v4
+        with:
+          repository: mike-axiom-mir/axm-universal-creation
+          ref: 9a4ab8156772536526dd75bb2acab81e9b88f517
+          path: .uc-surface-previous
+      - name: Checkout current Universal Creation
+        uses: actions/checkout@v4
+        with:
+          repository: mike-axiom-mir/axm-universal-creation
+          ref: 2595788885faca5fbe69e1497b55d535aff51259
+          path: .uc-source-successor-surface
+      - name: Compile source-successor surface bridge
+        run: python -m compileall -q tools/build_uc_source_successor_surface_bridge_evidence.py
+      - name: Regenerate exact source-successor candidate through Geometry owner
+        run: |
+          mkdir -p evidence/uc_source_successor_surface/producer
+          PYTHONPATH=.animal-geometry-source-successor/src:.uc-topology-donor/src \
+            python .animal-geometry-source-successor/tools/build_source_successor_topology_rebind_evidence.py \
+              --source .animal-geometry-source-successor/examples/quadruped_neutral_001.json \
+              --profile .animal-geometry-source-successor/examples/quadruped_elbow_source_successor_003.json \
+              --out evidence/uc_source_successor_surface/producer
+      - name: Build exact selected-003 Geometry -> current UC -> GLB evidence
+        env:
+          AXM_ANIMAL_GEOMETRY_COMMIT: eb5ce99798b646b6ab9705c0c914b898173f7cc1
+          AXM_ANIMAL_GEOMETRY_CHECKOUT: ${{ github.workspace }}/.animal-geometry-source-successor
+          AXM_GEOMETRY_PRODUCER_EVIDENCE: ${{ github.workspace }}/evidence/uc_source_successor_surface/producer
+          AXM_PREVIOUS_UC_COMMIT: 9a4ab8156772536526dd75bb2acab81e9b88f517
+          AXM_PREVIOUS_UC_CHECKOUT: ${{ github.workspace }}/.uc-surface-previous
+          AXM_UC_COMMIT: 2595788885faca5fbe69e1497b55d535aff51259
+          AXM_UC_CHECKOUT: ${{ github.workspace }}/.uc-source-successor-surface
+        run: PYTHONPATH=src:.uc-source-successor-surface/src python tools/build_uc_source_successor_surface_bridge_evidence.py
+      - name: Retain exact checkout identities
+        run: |
+          git rev-parse HEAD > evidence/uc_source_successor_surface/technical-art-head.txt
+          git -C .animal-geometry-source-successor rev-parse HEAD > evidence/uc_source_successor_surface/geometry-head.txt
+          git -C .uc-surface-previous rev-parse HEAD > evidence/uc_source_successor_surface/previous-uc-head.txt
+          git -C .uc-source-successor-surface rev-parse HEAD > evidence/uc_source_successor_surface/uc-head.txt
+          git -C .uc-surface-previous rev-parse HEAD:src/axm_uc/procedural_3d.py > evidence/uc_source_successor_surface/previous-uc-procedural-3d-blob.txt
+          git -C .uc-source-successor-surface rev-parse HEAD:src/axm_uc/procedural_3d.py > evidence/uc_source_successor_surface/uc-procedural-3d-blob.txt
+          grep -q 'PASS_SOURCE_SUCCESSOR_GEOMETRY_TO_CURRENT_UC_GLB' evidence/uc_source_successor_surface/quadruped_selected003_uc_bridge.evidence.json
+      - name: Upload source-successor static UC bridge evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: quadruped-source-successor-current-uc-surface-bridge-evidence
+          path: evidence/uc_source_successor_surface/
+          if-no-files-found: error
