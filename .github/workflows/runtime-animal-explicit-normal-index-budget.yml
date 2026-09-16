@@ -1,0 +1,179 @@
+name: Runtime Animal explicit-normal indexed payload evidence
+
+on:
+  push:
+    branches: [studio/runtime-animal-explicit-normal-index-budget-001]
+    paths:
+      - ".github/workflows/runtime-animal-explicit-normal-index-budget.yml"
+      - "evidence/godot_runtime_animal_normal_index_budget/**"
+      - "tools/build_runtime_animal_normal_index_payload.py"
+      - "tools/verify_runtime_animal_normal_index_budget.py"
+      - "docs/RUNTIME_ANIMAL_EXPLICIT_NORMAL_INDEX_BUDGET_001.md"
+  pull_request:
+    paths:
+      - ".github/workflows/runtime-animal-explicit-normal-index-budget.yml"
+      - "evidence/godot_runtime_animal_normal_index_budget/**"
+      - "tools/build_runtime_animal_normal_index_payload.py"
+      - "tools/verify_runtime_animal_normal_index_budget.py"
+      - "docs/RUNTIME_ANIMAL_EXPLICIT_NORMAL_INDEX_BUDGET_001.md"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  exact-animal-explicit-normal-index-budget:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout exact Runtime head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+
+      - name: Bind exact Geometry normal-field parent
+        run: |
+          set -euo pipefail
+          git rev-parse HEAD > exact-head.txt
+          test "$(git rev-parse HEAD)" = "${{ github.event.pull_request.head.sha || github.sha }}"
+          git cat-file -e 79e1667f6cc91e2ec8e41f01df18b6933c9c876d^{commit}
+          git merge-base --is-ancestor 79e1667f6cc91e2ec8e41f01df18b6933c9c876d HEAD
+          test "$(git hash-object src/axm_animal_design/bilateral_logical_quad_normals.py)" = "$(git show 79e1667f6cc91e2ec8e41f01df18b6933c9c876d:src/axm_animal_design/bilateral_logical_quad_normals.py | git hash-object --stdin)"
+
+      - name: Checkout exact historical Rigging plan donor for inherited tests
+        uses: actions/checkout@v4
+        with:
+          repository: mike-axiom-mir/axm-animal-design
+          ref: 04760112deb81a8d145226fe7ee02923107c9916
+          path: rig-donor
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Compile and run inherited Animal suite
+        env:
+          AXM_RIG_PLAN: rig-donor/examples/quadruped_rig_probe_001.json
+        run: |
+          python -m compileall -q src tests tools
+          python -m unittest discover -s tests -v
+
+      - name: Build exact explicit-normal Runtime payload
+        env:
+          PYTHONPATH: src
+        run: |
+          set -euo pipefail
+          out=evidence/runtime_animal_explicit_normal_index_budget_001
+          mkdir -p "$out"
+          python tools/build_runtime_animal_normal_index_payload.py \
+            --source examples/quadruped_neutral_001.json \
+            --left-profile examples/quadruped_elbow_source_successor_003.json \
+            --bilateral-profile examples/quadruped_elbow_bilateral_successor_003.json \
+            --parent-head 79e1667f6cc91e2ec8e41f01df18b6933c9c876d \
+            --runtime-head "$(git rev-parse HEAD)" \
+            --out "$out/payload.json"
+          grep -q 'axm.runtime-animal-explicit-normal-index-budget-payload/v0.1' "$out/payload.json"
+
+      - name: Install visual verifier dependency
+        run: python -m pip install --disable-pip-version-check pillow
+
+      - name: Download pinned Godot 4.7.2
+        env:
+          GODOT_URL: https://github.com/godotengine/godot-builds/releases/download/4.7.2-stable/Godot_v4.7.2-stable_linux.x86_64.zip
+          GODOT_SHA256: cadd3204e728a35d3f13adb7fd0d7902636b79f6b95c40c265eb73b6c35329e4
+        run: |
+          set -euo pipefail
+          mkdir -p .godot-bin
+          curl --fail --location --retry 3 --retry-delay 2 "$GODOT_URL" --output .godot-bin/godot.zip
+          echo "$GODOT_SHA256  .godot-bin/godot.zip" | sha256sum --check --strict
+          unzip -q .godot-bin/godot.zip -d .godot-bin
+          chmod +x .godot-bin/Godot_v4.7.2-stable_linux.x86_64
+          .godot-bin/Godot_v4.7.2-stable_linux.x86_64 --version
+
+      - name: Install virtual display when needed
+        run: |
+          if ! command -v xvfb-run >/dev/null 2>&1; then sudo apt-get update && sudo apt-get install -y xvfb; fi
+
+      - name: Validate Godot proof project
+        run: .godot-bin/Godot_v4.7.2-stable_linux.x86_64 --headless --path evidence/godot_runtime_animal_normal_index_budget --editor --quit
+
+      - name: Observe exact unindexed explicit-normal control
+        run: |
+          set -euo pipefail
+          out="$(pwd)/evidence/runtime_animal_explicit_normal_index_budget_001/control"
+          mkdir -p "$out"
+          xvfb-run --auto-servernum --server-args="-screen 0 1024x768x24" \
+            .godot-bin/Godot_v4.7.2-stable_linux.x86_64 \
+            --display-driver x11 --rendering-method gl_compatibility \
+            --path evidence/godot_runtime_animal_normal_index_budget \
+            --script res://observe.gd -- \
+            --payload "$(pwd)/evidence/runtime_animal_explicit_normal_index_budget_001/payload.json" \
+            --out-dir "$out" \
+            --mode UNINDEXED_EXPLICIT_NORMAL_CONTROL \
+            2>&1 | tee "$out/godot.log"
+          grep -q 'PASS_RUNTIME_ANIMAL_EXPLICIT_NORMAL_INDEX_OBSERVATION' "$out/godot.log"
+
+      - name: Observe exact indexed explicit-normal candidate
+        run: |
+          set -euo pipefail
+          out="$(pwd)/evidence/runtime_animal_explicit_normal_index_budget_001/candidate"
+          mkdir -p "$out"
+          xvfb-run --auto-servernum --server-args="-screen 0 1024x768x24" \
+            .godot-bin/Godot_v4.7.2-stable_linux.x86_64 \
+            --display-driver x11 --rendering-method gl_compatibility \
+            --path evidence/godot_runtime_animal_normal_index_budget \
+            --script res://observe.gd -- \
+            --payload "$(pwd)/evidence/runtime_animal_explicit_normal_index_budget_001/payload.json" \
+            --out-dir "$out" \
+            --mode INDEXED_EXPLICIT_NORMAL_CANDIDATE \
+            2>&1 | tee "$out/godot.log"
+          grep -q 'PASS_RUNTIME_ANIMAL_EXPLICIT_NORMAL_INDEX_OBSERVATION' "$out/godot.log"
+
+      - name: Verify exact Runtime A/B
+        run: |
+          set -euo pipefail
+          out=evidence/runtime_animal_explicit_normal_index_budget_001
+          python tools/verify_runtime_animal_normal_index_budget.py \
+            --control-receipt "$out/control/runtime.json" \
+            --candidate-receipt "$out/candidate/runtime.json" \
+            --control-root "$out/control" \
+            --candidate-root "$out/candidate" \
+            --output "$out/report.json"
+          cp exact-head.txt "$out/exact-head.txt"
+
+      - name: Exercise fail-closed stored-vertex reduction control
+        run: |
+          set -euo pipefail
+          out=evidence/runtime_animal_explicit_normal_index_budget_001
+          cp "$out/candidate/runtime.json" "$out/candidate/runtime-mutated.json"
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          p=Path('evidence/runtime_animal_explicit_normal_index_budget_001/candidate/runtime-mutated.json')
+          data=json.loads(p.read_text())
+          data['representation']['stored_vertex_count']=240
+          p.write_text(json.dumps(data,indent=2)+'\n')
+          PY
+          if python tools/verify_runtime_animal_normal_index_budget.py \
+            --control-receipt "$out/control/runtime.json" \
+            --candidate-receipt "$out/candidate/runtime-mutated.json" \
+            --control-root "$out/control" \
+            --candidate-root "$out/candidate" \
+            --output "$out/should-not-pass.json"; then
+            echo 'negative control unexpectedly passed' >&2
+            exit 1
+          fi
+          echo PASS_FAIL_CLOSED_STORED_VERTEX_REDUCTION_CONTROL
+          rm -f "$out/should-not-pass.json"
+
+      - name: Upload exact Runtime evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: runtime-animal-explicit-normal-index-budget-001-${{ github.event.pull_request.head.sha || github.sha }}
+          path: evidence/runtime_animal_explicit_normal_index_budget_001
+          if-no-files-found: error
+          retention-days: 30

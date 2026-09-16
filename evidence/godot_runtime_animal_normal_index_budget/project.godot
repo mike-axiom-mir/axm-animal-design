@@ -1,0 +1,13 @@
+[application]
+config/name="AXM Animal Explicit Normal Index Budget"
+run/main_scene=""
+
+[display]
+window/size/viewport_width=960
+window/size/viewport_height=720
+window/size/window_width_override=960
+window/size/window_height_override=720
+
+[rendering]
+renderer/rendering_method="gl_compatibility"
+renderer/rendering_method.mobile="gl_compatibility"
