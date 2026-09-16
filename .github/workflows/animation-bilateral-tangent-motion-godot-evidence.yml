@@ -212,20 +212,27 @@ jobs:
           assert receipt['payload_sha256'] == hashlib.sha256(payload_path.read_bytes()).hexdigest(), receipt
           assert receipt['payload_sha256'] == summary['payload_sha256'], (receipt, summary)
           assert receipt['source_gate'] == animation['gate'], receipt
+          host = receipt['host_storage_boundary']
+          assert host['packed_direction_vector_tolerance'] == 0.00025, host
+          assert host['packed_direction_angle_tolerance_deg'] == 0.015, host
+          assert host['claim'] == 'BOUNDED_GODOT_ARRAYMESH_DIRECTION_RECONSTRUCTION_NOT_EXACT_DIRECTION_FLOAT_IDENTITY', host
           attrs = receipt['attribute_readback']
           assert attrs['applications'] == 82, attrs
           assert attrs['maximum_position_readback_error_m'] <= 1e-6, attrs
-          assert attrs['maximum_normal_readback_error'] <= 1e-6, attrs
+          assert attrs['maximum_normal_readback_error'] <= 2.5e-4, attrs
+          assert attrs['maximum_normal_angular_error_deg'] <= 0.015, attrs
           assert attrs['maximum_uv_readback_error'] <= 1e-6, attrs
-          assert attrs['maximum_tangent_xyz_readback_error'] <= 1e-6, attrs
+          assert attrs['maximum_tangent_xyz_readback_error'] <= 2.5e-4, attrs
+          assert attrs['maximum_tangent_angular_error_deg'] <= 0.015, attrs
           assert attrs['maximum_tangent_w_readback_error'] <= 1e-6, attrs
-          assert attrs['maximum_tangent_normal_dot_abs'] <= 1e-6, attrs
+          assert attrs['maximum_tangent_normal_dot_abs'] <= 2.5e-4, attrs
           assert attrs['maximum_normal_unit_length_error'] <= 1e-6, attrs
           assert attrs['maximum_tangent_unit_length_error'] <= 1e-6, attrs
           assert attrs['index_mismatch_count'] == 0, attrs
           assert attrs['real_time_frame_pacing_claimed'] is False, attrs
           assert attrs['interpolation_claimed'] is False, attrs
           assert attrs['shaded_visual_quality_claimed'] is False, attrs
+          assert attrs['exact_direction_float_identity_claimed'] is False, attrs
           print(json.dumps(receipt, indent=2))
           PY
 
