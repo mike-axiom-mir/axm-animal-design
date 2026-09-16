@@ -14,13 +14,14 @@ out = ROOT / "evidence"
 out.mkdir(exist_ok=True)
 (out / "quadruped_rig_probe_001.evidence.json").write_text(json.dumps(evidence, indent=2, sort_keys=True))
 summary = {
-    "schema": "axm.animal-rig-deformation-summary/v0.1",
+    "schema": "axm.animal-rig-deformation-summary/v0.2",
     "source_name": evidence["source_name"],
     "source_digest": evidence["source_digest"],
     "surface_digest": evidence["surface_digest"],
     "plan_digest": evidence["plan_digest"],
     "joint_count": evidence["joint_count"],
     "pose_count": evidence["pose_count"],
+    "declared_downstream_region_count": evidence["declared_downstream_region_count"],
     "gate": evidence["gate"],
     "joint_statuses": {row["id"]: row["status"] for row in evidence["joints"]},
     "truth": evidence["truth"],
