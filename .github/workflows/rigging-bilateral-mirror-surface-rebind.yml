@@ -1,0 +1,85 @@
+name: Rigging bilateral mirror-surface rebind evidence
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  rigging-bilateral-mirror-surface-rebind:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ['3.11', '3.13']
+    steps:
+      - name: Checkout exact Rigging head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          path: animal
+          fetch-depth: 0
+
+      - name: Prove exact Geometry ancestry
+        working-directory: animal
+        run: git merge-base --is-ancestor bdbb51303bd1b96866b06a71730ccc328bf4f2f6 HEAD
+
+      - name: Checkout exact Rigging plan and weighting-profile donor
+        uses: actions/checkout@v4
+        with:
+          repository: mike-axiom-mir/axm-animal-design
+          ref: 04760112deb81a8d145226fe7ee02923107c9916
+          path: rig-donor
+
+      - name: Verify exact donor checkout
+        run: test "$(git -C rig-donor rev-parse HEAD)" = "04760112deb81a8d145226fe7ee02923107c9916"
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Compile
+        working-directory: animal
+        run: python -m compileall -q src tests tools
+
+      - name: Run full inherited Animal test suite plus exact rebind tests
+        working-directory: animal
+        env:
+          PYTHONPATH: src
+          AXM_RIG_PLAN: ../rig-donor/examples/quadruped_rig_probe_001.json
+          AXM_WEIGHTING_PROFILE: ../rig-donor/examples/quadruped_weighting_refinement_001.json
+        run: python -m unittest discover -s tests -v
+
+      - name: Build exact mirror-surface Rigging evidence
+        if: matrix.python-version == '3.11'
+        working-directory: animal
+        env:
+          PYTHONPATH: src
+        run: |
+          mkdir -p evidence/rigging-bilateral-mirror-surface-rebind-001
+          python tools/build_bilateral_mirror_surface_rigging_rebind_evidence.py \
+            --source examples/quadruped_neutral_001.json \
+            --left-profile examples/quadruped_elbow_source_successor_003.json \
+            --bilateral-profile examples/quadruped_elbow_bilateral_successor_003.json \
+            --rig-plan ../rig-donor/examples/quadruped_rig_probe_001.json \
+            --weighting-profile ../rig-donor/examples/quadruped_weighting_refinement_001.json \
+            --geometry-head bdbb51303bd1b96866b06a71730ccc328bf4f2f6 \
+            --previous-rigging-head 94bc573e2e06ba7a35c9908c141e2f939d4739a8 \
+            --rig-donor-head 04760112deb81a8d145226fe7ee02923107c9916 \
+            --current-rigging-head "$(git rev-parse HEAD)" \
+            --out evidence/rigging-bilateral-mirror-surface-rebind-001
+          grep -q 'PASS_BILATERAL_EXACT_MIRROR_SURFACE_RIGGING_REBIND_DENSE_SWEEPS' \
+            evidence/rigging-bilateral-mirror-surface-rebind-001/bilateral-mirror-surface-rigging-rebind-receipt.json
+          grep -q 'PASS_NEGATIVE_CONTROL_REPRODUCES_PREVIOUS_SURFACE_METRIC_HOLD' \
+            evidence/rigging-bilateral-mirror-surface-rebind-001/bilateral-mirror-surface-rigging-rebind-receipt.json
+          git rev-parse HEAD > evidence/rigging-bilateral-mirror-surface-rebind-001/exact-head.txt
+          printf '%s\n' 'bdbb51303bd1b96866b06a71730ccc328bf4f2f6' > evidence/rigging-bilateral-mirror-surface-rebind-001/exact-geometry-head.txt
+          printf '%s\n' '94bc573e2e06ba7a35c9908c141e2f939d4739a8' > evidence/rigging-bilateral-mirror-surface-rebind-001/previous-rigging-head.txt
+          printf '%s\n' '04760112deb81a8d145226fe7ee02923107c9916' > evidence/rigging-bilateral-mirror-surface-rebind-001/rig-donor-head.txt
+
+      - name: Upload exact mirror-surface Rigging evidence
+        if: ${{ always() && matrix.python-version == '3.11' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: animal-rigging-bilateral-mirror-surface-rebind-${{ github.event.pull_request.head.sha || github.sha }}
+          path: animal/evidence/rigging-bilateral-mirror-surface-rebind-001
+          if-no-files-found: error
+          retention-days: 30
