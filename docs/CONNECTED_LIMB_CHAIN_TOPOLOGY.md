@@ -47,6 +47,10 @@ The receiving repository re-tests the candidate with the exact Universal Creatio
 
 CI checks out that exact donor revision rather than copying the shared inspector into animal-design. Donor PASS does not transfer automatically: the exact animal candidate is measured again in this repository.
 
+That donor deliberately leaves vertex-neighborhood manifoldness and self-intersection unproven. This lane therefore adds one **receiving-domain-local** supplement, `inspect_vertex_fan_connectivity()`, for the exact indexed candidate. It checks that every indexed vertex belongs to exactly one edge-connected fan of incident triangles and that no indexed vertex is isolated. A negative control made from two closed tetrahedra sharing only one vertex must report two disconnected fans at that shared vertex, proving the gate can detect the bow-tie topology that ordinary per-edge closedness can miss.
+
+The supplement is not promoted into Universal Creation from one receiving case. It does not weld positional seams and it does not test geometric self-intersection.
+
 ## Before / after structural claim
 
 The evidence builder compares only the three existing left-front-limb primitives against the new derived connected-chain candidate. The intended gate is:
@@ -57,6 +61,8 @@ The evidence builder compares only the three existing left-front-limb primitives
 - candidate reports zero non-manifold edges;
 - candidate reports zero shared-edge orientation conflicts;
 - candidate reports zero collapsed triangles at the declared weld tolerance;
+- candidate reports zero isolated indexed vertices;
+- every candidate indexed vertex reports exactly one incident-triangle fan;
 - candidate radii are reproduced from the exact source-region chain rather than a detached hand-authored numeric list.
 
 CI is authoritative for the exact observed numbers. This document does not predeclare PASS.
@@ -67,7 +73,9 @@ Even a green topology receipt would **not** establish:
 
 - better silhouette or anatomical form;
 - that the arithmetic-mean junction policy is the visually or anatomically best radius transition;
-- deformation quality, volume preservation, or self-intersection freedom;
+- seam-welded vertex manifoldness for arbitrary split-vertex meshes;
+- freedom from geometric self-intersection;
+- deformation quality or volume preservation;
 - rigging or animation acceptance;
 - UV, material, normal/tangent, or shading quality;
 - collision or gameplay suitability;
@@ -75,4 +83,4 @@ Even a green topology receipt would **not** establish:
 - that the canonical quadruped should immediately switch to this topology;
 - animal-design or topology mastery.
 
-Visual Observer / Art Direction must compare the candidate against the retained baseline before any source replacement. Rigging must independently test it if adopted.
+Visual Observer / Art Direction must compare the candidate against the retained baseline before any source replacement. Rigging must independently test this exact topology if adopted.
