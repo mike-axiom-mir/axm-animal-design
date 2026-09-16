@@ -37,8 +37,23 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - name: Check out exact Animal animation lane
+      - name: Check out exact Animal animation lane head
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Bind proof to actual checked-out head
+        shell: bash
+        run: |
+          set -euo pipefail
+          EXACT_HEAD_SHA="$(git rev-parse HEAD)"
+          echo "EXACT_HEAD_SHA=${EXACT_HEAD_SHA}" >> "$GITHUB_ENV"
+          if [ -n "${{ github.event.pull_request.head.sha }}" ]; then
+            test "${EXACT_HEAD_SHA}" = "${{ github.event.pull_request.head.sha }}"
+          else
+            test "${EXACT_HEAD_SHA}" = "${GITHUB_SHA}"
+          fi
+          echo "exact Animal head: ${EXACT_HEAD_SHA}"
 
       - uses: actions/setup-python@v5
         with:
@@ -61,6 +76,7 @@ jobs:
           python - <<'PY'
           import hashlib
           import json
+          import os
           from pathlib import Path
 
           root = Path('tools/godot_animation_playback/generated')
@@ -68,9 +84,13 @@ jobs:
           summary = json.loads((root / 'quadruped_animation_payload_summary.json').read_text())
           payload = json.loads(payload_path.read_text())
           digest = hashlib.sha256(payload_path.read_bytes()).hexdigest()
+          exact_head = os.environ['EXACT_HEAD_SHA']
 
           assert summary['gate'] == 'PASS_GODOT_DISCRETE_PLAYBACK_PAYLOAD_BUILD', summary
           assert digest == summary['payload_sha256'], (digest, summary)
+          assert payload['receiving_repository']['repository'] == 'mike-axiom-mir/axm-animal-design', payload
+          assert payload['receiving_repository']['git_head'] == exact_head, (payload, exact_head)
+          assert summary['receiving_repository'] == payload['receiving_repository'], (summary, payload)
           assert payload['source_playback']['source_gate'] == 'PASS_DISCRETE_SAMPLED_PLAYBACK_SEAM', payload
           assert payload['source_playback']['displayed_frame_count_per_cycle'] == 40, payload
           assert payload['source_playback']['sample_rate_hz'] == 40, payload
@@ -121,15 +141,18 @@ jobs:
           python - <<'PY'
           import hashlib
           import json
+          import os
           from pathlib import Path
 
           root = Path('tools/godot_animation_playback/generated')
           receipt = json.loads((root / 'quadruped_animation_godot_receipt.json').read_text())
           summary = json.loads((root / 'quadruped_animation_payload_summary.json').read_text())
           payload_path = root / 'quadruped_animation_payload.json'
+          exact_head = os.environ['EXACT_HEAD_SHA']
 
           assert receipt['state'] == 'PASS_GODOT_DISCRETE_SAMPLE_PLAYBACK_PROOF_HOST', receipt
           assert receipt['promotion_effect'] == 'NONE', receipt
+          assert summary['receiving_repository']['git_head'] == exact_head, (summary, exact_head)
           assert receipt['payload_sha256'] == hashlib.sha256(payload_path.read_bytes()).hexdigest(), receipt
           assert receipt['payload_sha256'] == summary['payload_sha256'], (receipt, summary)
           assert receipt['source_identity'] == summary['source_identity'], (receipt, summary)
@@ -166,7 +189,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: quadruped-articulation-loop-001-godot-playback-${{ github.sha }}
+          name: quadruped-articulation-loop-001-godot-playback-${{ env.EXACT_HEAD_SHA }}
           path: |
             tools/godot_animation_playback/generated/quadruped_animation_payload.json
             tools/godot_animation_playback/generated/quadruped_animation_payload_summary.json
