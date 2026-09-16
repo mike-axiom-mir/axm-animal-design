@@ -7,6 +7,7 @@ organic-form baseline, prove deformation quality, or claim visual acceptance.
 from __future__ import annotations
 
 import math
+from collections import defaultdict
 from typing import Iterable, Sequence
 
 
@@ -166,6 +167,122 @@ def derive_shared_ring_radii(regions: Iterable[dict], region_ids: Sequence[str])
         "path_landmarks": path_landmarks,
         "radii_m": radii,
         "junctions": junctions,
+    }
+
+
+def inspect_vertex_fan_connectivity(
+    positions: Iterable[Sequence[float]],
+    indices: Iterable[int],
+    *,
+    max_examples: int = 16,
+) -> dict:
+    """Inspect indexed triangle fans around every source vertex.
+
+    This is a deliberately local receiving-domain diagnostic. It detects bow-tie
+    style vertices where incident triangles split into multiple edge-connected
+    fans, plus isolated indexed vertices. It does not weld positional seams and it
+    does not test geometric self-intersection.
+    """
+    try:
+        vertices = tuple(_point(value, f"positions[{index}]") for index, value in enumerate(positions))
+    except TypeError as exc:
+        raise ValueError("positions must be an iterable of 3D points") from exc
+    if not vertices:
+        raise ValueError("positions must contain at least one vertex")
+
+    try:
+        raw_indices = tuple(indices)
+    except TypeError as exc:
+        raise ValueError("indices must be an iterable of triangle indices") from exc
+    if not raw_indices or len(raw_indices) % 3:
+        raise ValueError("indices must contain one or more complete triangles")
+    if any(type(index) is not int for index in raw_indices):
+        raise ValueError("triangle indices must be integers")
+    if any(index < 0 or index >= len(vertices) for index in raw_indices):
+        raise ValueError("triangle index is out of range")
+    if type(max_examples) is not int or max_examples < 0:
+        raise ValueError("max_examples must be a non-negative integer")
+
+    faces: list[tuple[int, int, int]] = []
+    incident_faces: list[list[int]] = [[] for _ in vertices]
+    edge_faces: dict[tuple[int, int], list[int]] = defaultdict(list)
+
+    for triangle_index in range(len(raw_indices) // 3):
+        face = tuple(raw_indices[triangle_index * 3: triangle_index * 3 + 3])
+        if len(set(face)) != 3:
+            raise ValueError(f"triangle {triangle_index} is collapsed by index")
+        faces.append(face)
+        for vertex in face:
+            incident_faces[vertex].append(triangle_index)
+        a, b, c = face
+        for start, end in ((a, b), (b, c), (c, a)):
+            edge = (start, end) if start < end else (end, start)
+            edge_faces[edge].append(triangle_index)
+
+    isolated_vertices = []
+    disconnected_fans = []
+    max_fan_components = 0
+
+    for vertex, incident in enumerate(incident_faces):
+        if not incident:
+            isolated_vertices.append(vertex)
+            continue
+
+        incident_set = set(incident)
+        adjacency = {triangle: set() for triangle in incident}
+        for triangle in incident:
+            others = [item for item in faces[triangle] if item != vertex]
+            for other in others:
+                edge = (vertex, other) if vertex < other else (other, vertex)
+                for neighbor in edge_faces[edge]:
+                    if neighbor != triangle and neighbor in incident_set:
+                        adjacency[triangle].add(neighbor)
+                        adjacency[neighbor].add(triangle)
+
+        remaining = set(incident)
+        components = 0
+        while remaining:
+            components += 1
+            stack = [remaining.pop()]
+            while stack:
+                current = stack.pop()
+                for neighbor in adjacency[current]:
+                    if neighbor in remaining:
+                        remaining.remove(neighbor)
+                        stack.append(neighbor)
+
+        max_fan_components = max(max_fan_components, components)
+        if components != 1:
+            disconnected_fans.append({
+                "vertex": vertex,
+                "incident_triangle_count": len(incident),
+                "fan_component_count": components,
+            })
+
+    status = (
+        "PASS_CONNECTED_VERTEX_FANS"
+        if not isolated_vertices and not disconnected_fans
+        else "DISCONNECTED_OR_ISOLATED_VERTEX_FANS"
+    )
+    return {
+        "status": status,
+        "vertex_count": len(vertices),
+        "triangle_count": len(raw_indices) // 3,
+        "isolated_vertex_count": len(isolated_vertices),
+        "disconnected_vertex_fan_count": len(disconnected_fans),
+        "max_vertex_fan_components": max_fan_components,
+        "examples": {
+            "isolated_vertices": isolated_vertices[:max_examples],
+            "disconnected_vertex_fans": disconnected_fans[:max_examples],
+        },
+        "truth_boundary": {
+            "indexed_vertex_fan_connectivity_checked": True,
+            "positional_seams_welded": False,
+            "edge_incidence_checked": False,
+            "self_intersection_checked": False,
+            "deformation_quality_checked": False,
+            "visual_quality_checked": False,
+        },
     }
 
 
