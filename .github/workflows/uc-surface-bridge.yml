@@ -140,3 +140,67 @@ jobs:
           name: quadruped-animation-current-uc-clock-bridge-evidence
           path: evidence/uc_animation_clock/
           if-no-files-found: error
+
+  animal-source-successor-current-uc-clock-bridge:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout exact Technical Art head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Checkout exact source-successor Animation producer
+        uses: actions/checkout@v4
+        with:
+          repository: mike-axiom-mir/axm-animal-design
+          ref: badd8574b1acb5b4adf23544a9befc7cad86d1a1
+          path: .animal-animation-successor
+      - name: Checkout exact source-successor Rigging donor
+        uses: actions/checkout@v4
+        with:
+          repository: mike-axiom-mir/axm-animal-design
+          ref: b48bb957622ed5c82a24ca4fcb471f7ee9b5147a
+          path: .animal-rigging-successor
+      - name: Checkout exact historical rig/profile donor
+        uses: actions/checkout@v4
+        with:
+          repository: mike-axiom-mir/axm-animal-design
+          ref: 04760112deb81a8d145226fe7ee02923107c9916
+          path: .animal-rig-donor
+      - name: Checkout current Universal Creation
+        uses: actions/checkout@v4
+        with:
+          repository: mike-axiom-mir/axm-universal-creation
+          ref: 091c90047a38894ebdb88dba268f1212411a6cc4
+          path: .uc-source-successor-runtime
+      - name: Compile source-successor Technical Art bridge
+        run: python -m compileall -q tools/build_uc_source_successor_animation_clock_bridge_evidence.py
+      - name: Build exact source-successor Animation -> current UC clock evidence
+        env:
+          AXM_ANIMAL_ANIMATION_COMMIT: badd8574b1acb5b4adf23544a9befc7cad86d1a1
+          AXM_ANIMAL_ANIMATION_CHECKOUT: .animal-animation-successor
+          AXM_ANIMAL_SUCCESSOR_RIGGING_COMMIT: b48bb957622ed5c82a24ca4fcb471f7ee9b5147a
+          AXM_ANIMAL_SUCCESSOR_RIGGING_CHECKOUT: .animal-rigging-successor
+          AXM_ANIMAL_RIG_DONOR_COMMIT: 04760112deb81a8d145226fe7ee02923107c9916
+          AXM_ANIMAL_RIG_DONOR_CHECKOUT: .animal-rig-donor
+          AXM_UC_COMMIT: 091c90047a38894ebdb88dba268f1212411a6cc4
+          AXM_UC_CHECKOUT: .uc-source-successor-runtime
+        run: PYTHONPATH=.uc-source-successor-runtime/src python tools/build_uc_source_successor_animation_clock_bridge_evidence.py
+      - name: Retain exact checkout identities
+        run: |
+          git rev-parse HEAD > evidence/uc_source_successor_animation_clock/technical-art-head.txt
+          git -C .animal-animation-successor rev-parse HEAD > evidence/uc_source_successor_animation_clock/animation-head.txt
+          git -C .animal-rigging-successor rev-parse HEAD > evidence/uc_source_successor_animation_clock/rigging-head.txt
+          git -C .animal-rig-donor rev-parse HEAD > evidence/uc_source_successor_animation_clock/rig-donor-head.txt
+          git -C .uc-source-successor-runtime rev-parse HEAD > evidence/uc_source_successor_animation_clock/uc-head.txt
+          git -C .uc-source-successor-runtime rev-parse HEAD:src/axm_uc/game_animation_runtime.py > evidence/uc_source_successor_animation_clock/uc-runtime-blob.txt
+      - name: Upload source-successor Animal animation clock bridge evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: quadruped-source-successor-current-uc-clock-bridge-evidence
+          path: evidence/uc_source_successor_animation_clock/
+          if-no-files-found: error
