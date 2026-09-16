@@ -1,0 +1,10 @@
+{
+  "schema": "axm.animal-weighting-refinement/v0.1",
+  "name": "quadruped-weighting-refinement-001",
+  "source_name": "quadruped-neutral-001",
+  "baseline_plan_digest": "b1f39ef8cd127edf9288b89ebd1f1fc14e6a3ceb8b0db58fa0ba9b12bc892aa8",
+  "baseline_profile": "smoothstep-v0",
+  "candidate_profile": "ease-out-power-0p75-v1",
+  "candidate_exponent": 0.75,
+  "scope": "Same exact source, joints, axes, influence radii, downstream inheritance and -60/0/+60 pose samples; candidate changes only child-region weight falloff."
+}

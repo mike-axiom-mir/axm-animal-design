@@ -30,3 +30,15 @@ jobs:
           name: quadruped-neutral-001-evidence
           path: evidence/
           if-no-files-found: error
+      - name: Build exact rig-deformation evidence
+        if: matrix.python-version == '3.11'
+        run: python tools/build_rig_deformation_probe.py
+      - name: Upload rig-deformation evidence
+        if: matrix.python-version == '3.11'
+        uses: actions/upload-artifact@v4
+        with:
+          name: quadruped-rig-probe-001-evidence
+          path: |
+            evidence/quadruped_rig_probe_001.evidence.json
+            evidence/quadruped_rig_probe_001.summary.json
+          if-no-files-found: error
