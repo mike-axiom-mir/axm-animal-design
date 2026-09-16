@@ -132,8 +132,7 @@ func _place_camera(camera: Camera3D, center: Vector3, radius: float, context: St
         offset = Vector3(3.35, 0.28, 0.82) * radius
     else:
         return
-    camera.global_position = center + offset
-    camera.look_at(center, Vector3.UP)
+    camera.look_at_from_position(center + offset, center, Vector3.UP)
 
 func _capture(viewport: SubViewport, out_path: String) -> Dictionary:
     var image := viewport.get_texture().get_image()
@@ -230,6 +229,7 @@ func _initialize() -> void:
     camera.far = 20.0
     root3d.add_child(camera)
     camera.make_current()
+    await _settle()
 
     var b := _bounds(payload["positions"] as Array)
     var center: Vector3 = b["center"]
@@ -240,6 +240,9 @@ func _initialize() -> void:
         _place_camera(camera, center, radius, context)
         await _settle()
         var stats := _runtime_stats()
+        if int(stats["objects_in_frame"]) != 1 or int(stats["primitives_in_frame"]) != 80 or int(stats["draw_calls_in_frame"]) != 1:
+            _fail("proof camera did not present the exact one-object / 80-primitive / one-draw surface in %s: %s" % [context, stats], out_dir)
+            return
         var filename := "%s.png" % context
         var capture := _capture(viewport, out_dir.path_join(filename))
         if capture.get("state") != "PASS":
