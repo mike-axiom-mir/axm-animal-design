@@ -1,0 +1,34 @@
+name: Connected chain self-intersection evidence
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  self-intersection:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ['3.11', '3.13']
+    steps:
+      - name: Checkout animal-design candidate
+        uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Compile geometry diagnostics
+        run: python -m compileall -q src tests tools
+      - name: Run full animal-design unit suite
+        run: python -m unittest discover -s tests -v
+      - name: Build exact static self-intersection evidence
+        env:
+          PYTHONPATH: src
+        run: python tools/build_self_intersection_evidence.py
+      - name: Upload exact self-intersection evidence
+        if: matrix.python-version == '3.11'
+        uses: actions/upload-artifact@v4
+        with:
+          name: front-left-connected-chain-001-self-intersection-evidence
+          path: evidence/topology-self-intersection/
+          if-no-files-found: error
