@@ -1,0 +1,14 @@
+; Engine configuration file.
+; AXM bounded Runtime evidence host only.
+config_version=5
+
+[application]
+config/name="AXM Runtime Animal Tangent Index Budget"
+
+[display]
+window/size/viewport_width=960
+window/size/viewport_height=720
+
+[rendering]
+renderer/rendering_method="gl_compatibility"
+renderer/rendering_method.mobile="gl_compatibility"
