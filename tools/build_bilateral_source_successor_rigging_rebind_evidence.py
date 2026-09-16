@@ -91,6 +91,24 @@ def _negative_controls(spec, left_profile, bilateral_profile, plan, weighting_pr
     return controls
 
 
+def _diagnostic_summary(receipt):
+    return {
+        "state": receipt["state"],
+        "left_baseline": receipt["left"]["baseline_summary"],
+        "left_refined": receipt["left"]["refined_summary"],
+        "right_baseline": receipt["right"]["baseline_summary"],
+        "right_refined": receipt["right"]["refined_summary"],
+        "left_weighting_gate": receipt["left"]["boundary_weighting_comparison"]["gate"],
+        "right_weighting_gate": receipt["right"]["boundary_weighting_comparison"]["gate"],
+        "baseline_mirror_gate": receipt["bilateral_mirror_evidence"]["smoothstep-v0"]["gate"],
+        "refined_mirror_gate": receipt["bilateral_mirror_evidence"]["ease-out-power-0p75-v1"]["gate"],
+        "baseline_mirror_max_pose_residual_m": receipt["bilateral_mirror_evidence"]["smoothstep-v0"]["maximum_mirrored_pose_residual_m"],
+        "refined_mirror_max_pose_residual_m": receipt["bilateral_mirror_evidence"]["ease-out-power-0p75-v1"]["maximum_mirrored_pose_residual_m"],
+        "baseline_mirror_max_metric_residual": receipt["bilateral_mirror_evidence"]["smoothstep-v0"]["maximum_structural_metric_residual"],
+        "refined_mirror_max_metric_residual": receipt["bilateral_mirror_evidence"]["ease-out-power-0p75-v1"]["maximum_structural_metric_residual"],
+    }
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--source", required=True)
@@ -131,6 +149,8 @@ def main():
     receipt = inspect_bilateral_source_successor_rigging_rebind(
         spec, left_profile, bilateral_profile, plan, weighting_profile
     )
+    diagnostic = _diagnostic_summary(receipt)
+    print("AXM_BILATERAL_RIGGING_DIAGNOSTIC=" + json.dumps(diagnostic, sort_keys=True))
     if receipt["state"] != "PASS_BILATERAL_SOURCE_SUCCESSOR_RIGGING_REBIND_DENSE_SWEEP":
         raise SystemExit("bilateral source-successor Rigging dense sweep did not pass")
 
