@@ -1,10 +1,8 @@
 """Technical-Art transport for Geometry-owned UV/tangent render vertices.
 
-This module does not author Animal UVs, normals, tangents, topology, weights or
-motion. It consumes Geometry's exact render-domain basis, duplicates the existing
-Rigging weights through Geometry's source->render map, applies the explicit Animal
--> UC coordinate boundary, and emits a glTF 2.0 skin whose primitive retains
-POSITION/NORMAL/TANGENT/TEXCOORD_0/JOINTS_0/WEIGHTS_0 together.
+Geometry owns the UV/normal/tangent render domain. Rigging owns weights. Animation
+owns keys. This receiver only maps those exact owner payloads into the established
+Animal -> UC coordinate/glTF boundary; it does not author Animal domain data.
 """
 from __future__ import annotations
 
@@ -19,7 +17,6 @@ from .uc_rigged_animation_bridge import (
     JOINT_ID,
     SOURCE_CANDIDATE_ID,
     WEIGHTING_ID,
-    _color,
     _f32,
     _flatten,
     _pad4,
@@ -69,17 +66,11 @@ def _unit3(value: Any, label: str) -> list[float]:
 
 
 def source_direction_to_uc(value: Any, label: str) -> list[float]:
-    """Transform an ordinary direction vector through the Animal -> UC basis."""
     return _unit3(_source_to_uc(_unit3(value, label), label), f"mapped {label}")
 
 
 def source_tangent_to_uc(value: Any) -> list[float]:
-    """Transform glTF tangent XYZW through the orientation-reversing basis.
-
-    Tangent XYZ is an ordinary direction and therefore uses M. glTF tangent W
-    encodes bitangent handedness; because det(M)=-1, W must flip sign so that
-    w*cross(N,T) represents the transformed source bitangent.
-    """
+    """Map tangent XYZ as a polar vector and flip W because det(M)=-1."""
     if not isinstance(value, (list, tuple)) or len(value) != 4:
         raise ValueError("source tangent must be [x,y,z,w]")
     xyz = source_direction_to_uc(value[:3], "tangent")
@@ -98,15 +89,9 @@ def _validate_geometry_basis(basis: dict[str, Any], neutral: list[list[float]]) 
         raise ValueError("Geometry source/render vertex-count contract drift")
     if basis.get("triangle_count") != TRIANGLE_COUNT:
         raise ValueError("Geometry triangle-count contract drift")
-    fields = {
-        "render_positions": (RENDER_VERTEX_COUNT, 3),
-        "render_normals": (RENDER_VERTEX_COUNT, 3),
-        "render_uvs": (RENDER_VERTEX_COUNT, 2),
-        "render_tangents": (RENDER_VERTEX_COUNT, 4),
-    }
-    for name, (count, width) in fields.items():
+    for name, width in (("render_positions", 3), ("render_normals", 3), ("render_uvs", 2), ("render_tangents", 4)):
         rows = basis.get(name)
-        if not isinstance(rows, list) or len(rows) != count:
+        if not isinstance(rows, list) or len(rows) != RENDER_VERTEX_COUNT:
             raise ValueError(f"Geometry {name} count drift")
         for index, row in enumerate(rows):
             if not isinstance(row, (list, tuple)) or len(row) != width:
@@ -145,11 +130,17 @@ def _reverse_winding(indices: list[int]) -> list[int]:
     return output
 
 
-def maximum_expanded_owner_frame_residual(
-    *,
-    owner_frames: list[dict[str, Any]],
-    packed: PackedRiggedTangentGlb,
-) -> tuple[float, int | None]:
+def _base_color(source_material: dict[str, Any]) -> list[float]:
+    value = source_material.get("base_color")
+    if not isinstance(value, (list, tuple)) or len(value) != 4:
+        raise ValueError("Animal source material base_color must contain four values")
+    output = [float(component) for component in value]
+    if any(not math.isfinite(component) or not 0.0 <= component <= 1.0 for component in output):
+        raise ValueError("Animal source material base_color must stay within 0..1")
+    return output
+
+
+def maximum_expanded_owner_frame_residual(*, owner_frames: list[dict[str, Any]], packed: PackedRiggedTangentGlb) -> tuple[float, int | None]:
     if len(owner_frames) != KEY_COUNT:
         raise ValueError("exact Animation owner evidence must contain 41 authored frames")
     maximum = 0.0
@@ -160,32 +151,15 @@ def maximum_expanded_owner_frame_residual(
         source_positions = frame.get("positions")
         if not isinstance(source_positions, list) or len(source_positions) != SOURCE_VERTEX_COUNT:
             raise ValueError("Animation owner source vertex count drift")
-        expected = [
-            [_f32(value) for value in _source_to_uc(source_positions[source_index], "owner render position")]
-            for source_index in packed.render_source_indices
-        ]
-        predicted = _posed(
-            packed.positions,
-            packed.weights,
-            packed.pivot,
-            _quat(packed.axis, float(frame["angle_deg"])),
-        )
+        expected = [[_f32(value) for value in _source_to_uc(source_positions[source_index], "owner render position")] for source_index in packed.render_source_indices]
+        predicted = _posed(packed.positions, packed.weights, packed.pivot, _quat(packed.axis, float(frame["angle_deg"])))
         residual = max(math.dist(left, right) for left, right in zip(predicted, expected))
         if residual > maximum:
             maximum, worst = residual, sample_index
     return maximum, worst
 
 
-def pack_exact_right_forelimb_rigged_tangent_glb(
-    *,
-    spec: dict[str, Any],
-    plan: dict[str, Any],
-    owner_frames: list[dict[str, Any]],
-    geometry_basis: dict[str, Any],
-    source_material: dict[str, Any],
-    clip_name: str,
-) -> PackedRiggedTangentGlb:
-    """Pack exact 84-render-vertex UV/tangent data with the existing 41-key skin."""
+def pack_exact_right_forelimb_rigged_tangent_glb(*, spec: dict[str, Any], plan: dict[str, Any], owner_frames: list[dict[str, Any]], geometry_basis: dict[str, Any], source_material: dict[str, Any], clip_name: str) -> PackedRiggedTangentGlb:
     if len(owner_frames) != KEY_COUNT or owner_frames[0].get("time_seconds") != 0.0 or owner_frames[-1].get("time_seconds") != 1.0:
         raise ValueError("owner frames must preserve the exact 41-key 0..1 second contract")
     neutral = owner_frames[0].get("positions")
@@ -197,27 +171,15 @@ def pack_exact_right_forelimb_rigged_tangent_glb(
     landmarks = spec.get("landmarks", {})
     pivot_source = _vec3(landmarks[joint["landmark"]], "right elbow")
     child_source = _vec3(landmarks[joint["child_landmark"]], "right wrist")
-    source_joints, source_weights = smoothstep_weights(
-        neutral,
-        joint_position=pivot_source,
-        child_marker=child_source,
-        influence_radius=float(joint["influence_radius"]),
-    )
+    source_joints, source_weights = smoothstep_weights(neutral, joint_position=pivot_source, child_marker=child_source, influence_radius=float(joint["influence_radius"]))
 
-    positions = [
-        [_f32(value) for value in _source_to_uc(row, f"render_positions[{index}]")]
-        for index, row in enumerate(geometry_basis["render_positions"])
-    ]
-    normals = [
-        [_f32(value) for value in source_direction_to_uc(row, f"render_normals[{index}]")]
-        for index, row in enumerate(geometry_basis["render_normals"])
-    ]
+    positions = [[_f32(value) for value in _source_to_uc(row, f"render_positions[{index}]")] for index, row in enumerate(geometry_basis["render_positions"])]
+    normals = [[_f32(value) for value in source_direction_to_uc(row, f"render_normals[{index}]")] for index, row in enumerate(geometry_basis["render_normals"])]
     tangents = [source_tangent_to_uc(row) for row in geometry_basis["render_tangents"]]
     texcoords = [[_f32(float(u)), _f32(float(v))] for u, v in geometry_basis["render_uvs"]]
     joints = [[int(value) for value in source_joints[source_index]] for source_index in mapping]
     weights = [[_f32(value) for value in source_weights[source_index]] for source_index in mapping]
     indices = _reverse_winding([int(value) for value in geometry_basis["render_indices"]])
-
     pivot = [_f32(value) for value in _source_to_uc(pivot_source, "right elbow pivot")]
     axis = source_axis_to_uc(joint["axis"])
     times = [_f32(float(frame["time_seconds"])) for frame in owner_frames]
@@ -255,8 +217,8 @@ def pack_exact_right_forelimb_rigged_tangent_glb(
         flat = [int(value) for value in _flatten(rows)]
         return struct.pack("<" + "H" * len(flat), *flat)
 
-    pos_min = [min(row[dimension] for row in positions) for dimension in range(3)]
-    pos_max = [max(row[dimension] for row in positions) for dimension in range(3)]
+    pos_min = [min(row[d] for row in positions) for d in range(3)]
+    pos_max = [max(row[d] for row in positions) for d in range(3)]
     a_pos = accessor(floats(positions), 5126, RENDER_VERTEX_COUNT, "VEC3", 34962, pos_min, pos_max)
     a_nrm = accessor(floats(normals), 5126, RENDER_VERTEX_COUNT, "VEC3", 34962)
     a_tan = accessor(floats(tangents), 5126, RENDER_VERTEX_COUNT, "VEC4", 34962)
@@ -268,29 +230,15 @@ def pack_exact_right_forelimb_rigged_tangent_glb(
     a_inv = accessor(floats(inverse), 5126, 2, "MAT4")
     a_time = accessor(floats(times), 5126, KEY_COUNT, "SCALAR", minimum=[times[0]], maximum=[times[-1]])
     a_rot = accessor(floats(rotations), 5126, KEY_COUNT, "VEC4")
-
     binary = b"".join(chunks)
+
     document: dict[str, Any] = {
         "asset": {"version": "2.0", "generator": "AXM Animal Technical Art rigged UV/tangent bridge v0.1"},
         "scene": 0,
         "scenes": [{"name": "Animal right forelimb UV tangent transport proof", "nodes": [0, 1]}],
-        "nodes": [
-            {"name": "AnimalRightForelimbRenderDomain", "mesh": 0, "skin": 0},
-            {"name": "transport-parent", "children": [2]},
-            {"name": JOINT_ID, "translation": pivot},
-        ],
-        "meshes": [{"name": TRANSPORT_SURFACE_ID, "primitives": [{
-            "attributes": {
-                "POSITION": a_pos, "NORMAL": a_nrm, "TANGENT": a_tan, "TEXCOORD_0": a_uv,
-                "JOINTS_0": a_jnt, "WEIGHTS_0": a_wgt,
-            },
-            "indices": a_idx, "material": 0, "mode": 4,
-        }]}],
-        "materials": [{"name": "AnimalNeutralTransportMaterial", "pbrMetallicRoughness": {
-            "baseColorFactor": _color(source_material["color"]),
-            "metallicFactor": float(source_material["metallic"]),
-            "roughnessFactor": float(source_material["roughness"]),
-        }, "doubleSided": False, "alphaMode": "OPAQUE"}],
+        "nodes": [{"name": "AnimalRightForelimbRenderDomain", "mesh": 0, "skin": 0}, {"name": "transport-parent", "children": [2]}, {"name": JOINT_ID, "translation": pivot}],
+        "meshes": [{"name": TRANSPORT_SURFACE_ID, "primitives": [{"attributes": {"POSITION": a_pos, "NORMAL": a_nrm, "TANGENT": a_tan, "TEXCOORD_0": a_uv, "JOINTS_0": a_jnt, "WEIGHTS_0": a_wgt}, "indices": a_idx, "material": 0, "mode": 4}]}],
+        "materials": [{"name": "AnimalNeutralTransportMaterial", "pbrMetallicRoughness": {"baseColorFactor": _base_color(source_material), "metallicFactor": float(source_material["metallic"]), "roughnessFactor": float(source_material["roughness"])}, "doubleSided": False, "alphaMode": "OPAQUE"}],
         "skins": [{"name": "AnimalRightForelimbTwoJointRenderDomainSkin", "inverseBindMatrices": a_inv, "skeleton": 1, "joints": [1, 2]}],
         "animations": [{"name": str(clip_name), "samplers": [{"input": a_time, "output": a_rot, "interpolation": "LINEAR"}], "channels": [{"sampler": 0, "target": {"node": 2, "path": "rotation"}}]}],
         "buffers": [{"byteLength": len(binary)}],
@@ -329,14 +277,10 @@ def pack_exact_right_forelimb_rigged_tangent_glb(
     at = 20 + len(json_chunk)
     struct.pack_into("<II", output, at, len(bin_chunk), 0x004E4942)
     output[at + 8:at + 8 + len(bin_chunk)] = bin_chunk
-    return PackedRiggedTangentGlb(
-        bytes(output), document, positions, normals, tangents, texcoords, joints, weights,
-        indices, mapping, pivot, axis, times, rotations,
-    )
+    return PackedRiggedTangentGlb(bytes(output), document, positions, normals, tangents, texcoords, joints, weights, indices, mapping, pivot, axis, times, rotations)
 
 
 def decode_first_primitive(glb: bytes) -> dict[str, Any]:
-    """Decode the exact first primitive attributes from emitted GLB bytes."""
     if len(glb) < 28 or struct.unpack_from("<I", glb, 0)[0] != 0x46546C67:
         raise ValueError("not a glTF binary container")
     json_length, json_type = struct.unpack_from("<II", glb, 12)
@@ -352,12 +296,12 @@ def decode_first_primitive(glb: bytes) -> dict[str, Any]:
     formats = {5126: ("f", 4), 5123: ("H", 2)}
 
     def read_accessor(index: int) -> list[Any]:
-        accessor = document["accessors"][index]
-        view = document["bufferViews"][accessor["bufferView"]]
-        fmt, size = formats[accessor["componentType"]]
-        width = widths[accessor["type"]]
-        offset = int(view.get("byteOffset", 0)) + int(accessor.get("byteOffset", 0))
-        count = int(accessor["count"])
+        accessor_row = document["accessors"][index]
+        view_row = document["bufferViews"][accessor_row["bufferView"]]
+        fmt, _ = formats[accessor_row["componentType"]]
+        width = widths[accessor_row["type"]]
+        offset = int(view_row.get("byteOffset", 0)) + int(accessor_row.get("byteOffset", 0))
+        count = int(accessor_row["count"])
         values = struct.unpack_from("<" + fmt * (count * width), binary, offset)
         if width == 1:
             return list(values)
