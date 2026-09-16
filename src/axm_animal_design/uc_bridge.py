@@ -1,10 +1,10 @@
-"""Explicit technical-art bridge from animal-design surface evidence into UC.
+"""Explicit technical-art bridges from animal-design surfaces into UC.
 
-The animal form study authors in metres using +X forward, +Y left, +Z up.
+Animal source geometry is authored in metres using +X forward, +Y left, +Z up.
 Universal Creation's portable surface/GLB path is metres, Y-up, +Z forward.
-This adapter performs the coordinate/handedness conversion explicitly, reverses
-triangle winding after the reflection, converts the neutral material contract,
-and records exact digests. It does not make animal-specific semantics part of UC.
+These adapters perform the coordinate/handedness conversion explicitly, reverse
+triangle winding after the reflection, convert the Animal-local material contract,
+and retain exact source/donor identities. Animal semantics stay in animal-design.
 """
 from __future__ import annotations
 
@@ -19,6 +19,7 @@ UC_SURFACE_SCHEMA = "axm.surface-3d/v0.1"
 SOURCE_COORDINATES = "+X forward, +Y left, +Z up"
 TARGET_COORDINATES = "+X right, +Y up, +Z forward"
 BRIDGE_SCHEMA = "axm.animal-uc-surface-bridge-evidence/v0.1"
+CONNECTED_BRIDGE_SCHEMA = "axm.animal-connected-candidate-uc-bridge-evidence/v0.1"
 
 
 def _canonical(value: Any) -> bytes:
@@ -64,16 +65,12 @@ def _linear_rgba_to_hex(value: Any) -> str:
     return "#" + "".join(f"{channel:02X}" for channel in channels)
 
 
-def adapt_form_evidence_for_uc(form_evidence: dict[str, Any]) -> dict[str, Any]:
-    """Return a strict UC-compatible surface without modifying source evidence."""
-    if not isinstance(form_evidence, dict) or form_evidence.get("schema") != ANIMAL_EVIDENCE_SCHEMA:
-        raise ValueError(f"form evidence must use {ANIMAL_EVIDENCE_SCHEMA}")
-    if form_evidence.get("coordinate_system") != SOURCE_COORDINATES:
+def _convert_surface_to_uc(name: str, surface: dict[str, Any], *, coordinate_system: str) -> dict[str, Any]:
+    """Convert one Animal-local renderer-neutral surface into UC's portable surface contract."""
+    if coordinate_system != SOURCE_COORDINATES:
         raise ValueError("unsupported animal coordinate system; refusing implicit axis conversion")
-    name = form_evidence.get("name")
     if not isinstance(name, str) or not name.strip():
-        raise ValueError("form evidence name is required")
-    surface = form_evidence.get("surface")
+        raise ValueError("surface name is required")
     if not isinstance(surface, dict) or surface.get("schema") != UC_SURFACE_SCHEMA:
         raise ValueError(f"surface must declare {UC_SURFACE_SCHEMA}")
     if surface.get("units") != "m":
@@ -84,7 +81,7 @@ def adapt_form_evidence_for_uc(form_evidence: dict[str, Any]) -> dict[str, Any]:
 
     output_primitives = []
     seen = set()
-    for primitive_index, primitive in enumerate(primitives):
+    for primitive in primitives:
         if not isinstance(primitive, dict):
             raise ValueError("surface primitive must be an object")
         identifier = primitive.get("id")
@@ -138,6 +135,114 @@ def adapt_form_evidence_for_uc(form_evidence: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def adapt_form_evidence_for_uc(form_evidence: dict[str, Any]) -> dict[str, Any]:
+    """Return a strict UC-compatible surface without modifying source form evidence."""
+    if not isinstance(form_evidence, dict) or form_evidence.get("schema") != ANIMAL_EVIDENCE_SCHEMA:
+        raise ValueError(f"form evidence must use {ANIMAL_EVIDENCE_SCHEMA}")
+    return _convert_surface_to_uc(
+        form_evidence.get("name"),
+        form_evidence.get("surface"),
+        coordinate_system=form_evidence.get("coordinate_system"),
+    )
+
+
+def build_candidate_source_primitive(candidate: dict[str, Any], *, material: dict[str, Any]) -> dict[str, Any]:
+    """Attach transport-only normals/material to an exact Animal geometry candidate.
+
+    Geometry remains authoritative for positions/indices. The bridge computes only
+    the vertex normals required by the existing portable UC surface contract and
+    carries an explicit Animal source material. This is transport plumbing, not a
+    claim that the computed normals are final authored shading normals.
+    """
+    if not isinstance(candidate, dict):
+        raise ValueError("candidate must be an object")
+    identifier = candidate.get("id")
+    positions = candidate.get("positions")
+    indices = candidate.get("indices")
+    if not isinstance(identifier, str) or not identifier:
+        raise ValueError("candidate id is required")
+    if not isinstance(positions, list) or not positions:
+        raise ValueError("candidate positions are required")
+    checked_positions = [_vec3(row, f"{identifier}.position") for row in positions]
+    if not isinstance(indices, list) or not indices or len(indices) % 3:
+        raise ValueError("candidate indices must contain complete triangles")
+    if any(type(index) is not int or not 0 <= index < len(checked_positions) for index in indices):
+        raise ValueError("candidate contains an out-of-range triangle index")
+    if not isinstance(material, dict):
+        raise ValueError("explicit source material is required")
+    base_color = material.get("base_color")
+    _linear_rgba_to_hex(base_color)
+    metallic = _finite(material.get("metallic"), "material.metallic")
+    roughness = _finite(material.get("roughness"), "material.roughness")
+    if not 0.0 <= metallic <= 1.0 or not 0.0 <= roughness <= 1.0:
+        raise ValueError("material metallic/roughness must stay within 0..1")
+
+    accum = [[0.0, 0.0, 0.0] for _ in checked_positions]
+    for offset in range(0, len(indices), 3):
+        ia, ib, ic = indices[offset:offset + 3]
+        a, b, c = checked_positions[ia], checked_positions[ib], checked_positions[ic]
+        ab = [b[axis] - a[axis] for axis in range(3)]
+        ac = [c[axis] - a[axis] for axis in range(3)]
+        face = [
+            ab[1] * ac[2] - ab[2] * ac[1],
+            ab[2] * ac[0] - ab[0] * ac[2],
+            ab[0] * ac[1] - ab[1] * ac[0],
+        ]
+        length = math.sqrt(sum(value * value for value in face))
+        if length <= 1e-12:
+            raise ValueError(f"{identifier} contains a degenerate triangle")
+        face = [value / length for value in face]
+        for vertex in (ia, ib, ic):
+            for axis in range(3):
+                accum[vertex][axis] += face[axis]
+
+    normals = []
+    for vertex, normal in enumerate(accum):
+        length = math.sqrt(sum(value * value for value in normal))
+        if length <= 1e-12:
+            raise ValueError(f"{identifier} contains unreferenced vertex {vertex}")
+        normals.append([round(value / length, 9) for value in normal])
+
+    return {
+        "id": identifier,
+        "positions": [[round(value, 9) for value in row] for row in checked_positions],
+        "normals": normals,
+        "colors": [copy.deepcopy(base_color) for _ in checked_positions],
+        "indices": list(indices),
+        "material": {
+            "base_color": copy.deepcopy(base_color),
+            "metallic": metallic,
+            "roughness": roughness,
+        },
+    }
+
+
+def adapt_geometry_candidate_for_uc(
+    candidate: dict[str, Any],
+    *,
+    name: str,
+    material: dict[str, Any],
+) -> dict[str, Any]:
+    """Bridge one exact Animal geometry candidate without absorbing its semantics into UC."""
+    primitive = build_candidate_source_primitive(candidate, material=material)
+    source_surface = {
+        "schema": UC_SURFACE_SCHEMA,
+        "units": "m",
+        "primitives": [primitive],
+    }
+    return _convert_surface_to_uc(name, source_surface, coordinate_system=SOURCE_COORDINATES)
+
+
+def require_candidate_identity(candidate: dict[str, Any], expected_sha256: str) -> str:
+    """Fail closed if an externally owned geometry candidate drifts."""
+    if not isinstance(expected_sha256, str) or len(expected_sha256) != 64:
+        raise ValueError("expected candidate sha256 is required")
+    observed = _digest(candidate)
+    if observed != expected_sha256:
+        raise ValueError(f"geometry candidate identity drift: expected {expected_sha256}, observed {observed}")
+    return observed
+
+
 def build_bridge_evidence(form_evidence: dict[str, Any], uc_surface: dict[str, Any], *, uc_commit: str,
                           glb_sha256: str, uc_specification_sha256: str, uc_verification: dict[str, Any]) -> dict[str, Any]:
     """Bind one exact animal source -> UC surface -> GLB proof without widening claims."""
@@ -181,5 +286,81 @@ def build_bridge_evidence(form_evidence: dict[str, Any], uc_surface: dict[str, A
             "by the pinned UC generator, emitted as GLB, and re-verified. It does not prove visual quality, "
             "anatomy, rig/deformation quality, animation, topology manifoldness, engine import, gameplay, "
             "performance, materials beyond transported factors, or production readiness."
+        ),
+    }
+
+
+def build_connected_candidate_bridge_evidence(
+    *,
+    source_digest: str,
+    source_surface_digest: str,
+    geometry_commit: str,
+    candidate: dict[str, Any],
+    expected_candidate_sha256: str,
+    source_material_sha256: str,
+    uc_surface: dict[str, Any],
+    uc_commit: str,
+    glb_sha256: str,
+    uc_specification_sha256: str,
+    uc_verification: dict[str, Any],
+) -> dict[str, Any]:
+    """Bind exact connected Geometry ownership to current UC GLB transport."""
+    candidate_sha256 = require_candidate_identity(candidate, expected_candidate_sha256)
+    for label, value in (
+        ("source_digest", source_digest),
+        ("source_surface_digest", source_surface_digest),
+        ("source_material_sha256", source_material_sha256),
+        ("glb_sha256", glb_sha256),
+        ("uc_specification_sha256", uc_specification_sha256),
+    ):
+        if not isinstance(value, str) or len(value) != 64:
+            raise ValueError(f"{label} must be an exact sha256")
+    if not isinstance(geometry_commit, str) or len(geometry_commit) < 40:
+        raise ValueError("exact Geometry commit identity is required")
+    if not isinstance(uc_commit, str) or len(uc_commit) < 40:
+        raise ValueError("exact UC commit identity is required")
+    if not isinstance(uc_verification, dict) or not uc_verification.get("passed"):
+        raise ValueError("successful UC verification is required")
+    return {
+        "schema": CONNECTED_BRIDGE_SCHEMA,
+        "status": "PASS_CONNECTED_GEOMETRY_CANDIDATE_TO_CURRENT_UC_GLB",
+        "source": {
+            "source_digest": source_digest,
+            "source_surface_digest": source_surface_digest,
+            "coordinate_system": SOURCE_COORDINATES,
+            "surface_units": "m",
+        },
+        "geometry": {
+            "repository": "mike-axiom-mir/axm-animal-design",
+            "commit": geometry_commit,
+            "candidate_id": candidate.get("id"),
+            "candidate_sha256": candidate_sha256,
+            "vertices": len(candidate.get("positions", [])),
+            "triangles": len(candidate.get("indices", [])) // 3,
+        },
+        "transport_adapter": {
+            "source_material_sha256": source_material_sha256,
+            "normal_method": "vertex-average-of-unit-face-normals-transport-only",
+            "source_coordinates": SOURCE_COORDINATES,
+            "target_coordinates": TARGET_COORDINATES,
+            "component_map": "[x_forward,y_left,z_up] -> [-y_left,z_up,x_forward]",
+            "handedness_change": True,
+            "triangle_winding_reversed": True,
+            "uc_surface_sha256": _digest(uc_surface),
+        },
+        "universal_creation": {
+            "repository": "mike-axiom-mir/axm-universal-creation",
+            "commit": uc_commit,
+            "specification_sha256": uc_specification_sha256,
+            "verification": copy.deepcopy(uc_verification),
+        },
+        "glb": {"sha256": glb_sha256},
+        "truth": (
+            "PASS proves only that the exact externally owned connected Animal Geometry candidate was rebuilt "
+            "from its pinned Geometry revision, given transport-only normals plus the unchanged neutral Animal "
+            "source material, converted through the explicit Animal->UC coordinate contract, accepted by the "
+            "pinned current UC GLB generator, and re-verified. It does not make the candidate canonical, does "
+            "not prove final authored normals/materials, deformation or skin transport, animation, engine import, "
+            "visual quality, gameplay, performance, or production readiness."
         ),
     }
