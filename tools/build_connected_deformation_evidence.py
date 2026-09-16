@@ -7,11 +7,11 @@ from pathlib import Path
 
 from axm_animal_design.connected_deformation import (
     CANDIDATE_DIGEST,
+    _build_exact_candidate,
     digest,
     inspect_connected_forelimb_deformation,
 )
 
-ROOT = Path(__file__).resolve().parents[1]
 EXPECTED_RIG_DONOR_HEAD = "04760112deb81a8d145226fe7ee02923107c9916"
 EXPECTED_RIG_PLAN_DIGEST = "b1f39ef8cd127edf9288b89ebd1f1fc14e6a3ceb8b0db58fa0ba9b12bc892aa8"
 GEOMETRY_PR4_HEAD = "feb4b24cd36bcc879173138d240754f71db34834"
@@ -52,7 +52,10 @@ def _pose_strip_svg(receipt, indices):
             ay = origin_y - (a[2] - min_z) * scale
             bx = origin_x + 20 + (b[0] - min_x) * scale
             by = origin_y - (b[2] - min_z) * scale
-            lines.append(f'<line x1="{ax:.2f}" y1="{ay:.2f}" x2="{bx:.2f}" y2="{by:.2f}" stroke="#d7e3ee" stroke-width="1" opacity="0.82"/>')
+            lines.append(
+                f'<line x1="{ax:.2f}" y1="{ay:.2f}" x2="{bx:.2f}" y2="{by:.2f}" '
+                'stroke="#d7e3ee" stroke-width="1" opacity="0.82"/>'
+            )
         title = f'{pose["angle_deg"]:+.0f} deg — {pose["status"]}'
         details = (
             f'min area {pose["minimum_triangle_area_ratio"]:.3f} | '
@@ -70,7 +73,8 @@ def _pose_strip_svg(receipt, indices):
         f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}">'
         '<rect width="100%" height="100%" fill="#0a0e12"/>'
         '<text x="20" y="420" fill="#73879a" font-family="monospace" font-size="11">'
-        'Exact connected forelimb candidate; X/Z wire projection only. Structural pose evidence, not visual acceptance.'</n        '</text>'
+        'Exact connected forelimb candidate; X/Z wire projection only. Structural pose evidence, not visual acceptance.'
+        '</text>'
         + "".join(panels)
         + '</svg>\n'
     )
@@ -125,17 +129,11 @@ def main():
         ],
     }
 
+    candidate, _ = _build_exact_candidate(spec)
     out.mkdir(parents=True, exist_ok=True)
     (out / "connected-forelimb-deformation-receipt.json").write_text(
         json.dumps(receipt, indent=2, sort_keys=True) + "\n", encoding="utf-8"
     )
-    (out / "connected-forelimb-pose-strip.svg").write_text(
-        _pose_strip_svg(receipt, list(range(0))), encoding="utf-8"
-    )
-
-    # Rebuild the exact candidate once more only to obtain its stable index buffer for the SVG.
-    from axm_animal_design.connected_deformation import _build_exact_candidate  # evidence-local private use
-    candidate, _ = _build_exact_candidate(spec)
     (out / "connected-forelimb-pose-strip.svg").write_text(
         _pose_strip_svg(receipt, candidate["indices"]), encoding="utf-8"
     )
