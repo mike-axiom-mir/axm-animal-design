@@ -20,6 +20,8 @@ from axm_animal_design.bilateral_source_successor_topology_rebind import (
 )
 from axm_animal_design.connected_deformation import digest
 
+HISTORICAL_WEIGHTING_VERIFICATION_HEAD = "5625c9f796a75e8b441458c51093e55519490611"
+
 
 def _write_obj(path: Path, positions, indices):
     lines = ["# AXM Animal retained bilateral Rigging pose; structural evidence only"]
@@ -144,14 +146,15 @@ def main():
         "organic_bilateral_source_head": ORGANIC_BILATERAL_HEAD,
         "geometry_bilateral_source_successor_head": GEOMETRY_BILATERAL_HEAD,
         "historical_left_source_successor_rigging_head": HISTORICAL_LEFT_RIGGING_HEAD,
-        "rig_plan_donor_head": RIG_DONOR_HEAD,
+        "rig_plan_and_profile_file_donor_head": RIG_DONOR_HEAD,
+        "historical_weighting_verification_head": HISTORICAL_WEIGHTING_VERIFICATION_HEAD,
         "rig_plan_digest": RIG_PLAN_DIGEST,
         "weighting_profile_digest": WEIGHTING_PROFILE_DIGEST,
         "source_path": "examples/quadruped_neutral_001.json",
         "left_source_successor_profile_path": "examples/quadruped_elbow_source_successor_003.json",
         "bilateral_source_successor_profile_path": "examples/quadruped_elbow_bilateral_successor_003.json",
-        "rig_plan_path": "examples/quadruped_rig_probe_001.json @ exact Rigging donor",
-        "weighting_profile_path": "examples/quadruped_weighting_refinement_001.json @ exact historical weighting donor",
+        "rig_plan_path": "examples/quadruped_rig_probe_001.json @ exact Rigging plan/profile file donor",
+        "weighting_profile_path": "examples/quadruped_weighting_refinement_001.json @ exact Rigging plan/profile file donor",
     }
     receipt["negative_controls"] = negatives
     receipt["non_claims"] = [
@@ -193,6 +196,8 @@ def main():
         "right_refined": receipt["right"]["refined_summary"],
         "baseline_mirror": receipt["bilateral_mirror_evidence"]["smoothstep-v0"]["gate"],
         "refined_mirror": receipt["bilateral_mirror_evidence"]["ease-out-power-0p75-v1"]["gate"],
+        "baseline_mirror_max_pose_residual_m": receipt["bilateral_mirror_evidence"]["smoothstep-v0"]["maximum_mirrored_pose_residual_m"],
+        "refined_mirror_max_pose_residual_m": receipt["bilateral_mirror_evidence"]["ease-out-power-0p75-v1"]["maximum_mirrored_pose_residual_m"],
         "negative_controls": negatives,
     }, sort_keys=True))
 
