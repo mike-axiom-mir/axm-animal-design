@@ -55,10 +55,11 @@ jobs:
           test "$(git -C .animal-rig-donor rev-parse HEAD)" = "04760112deb81a8d145226fe7ee02923107c9916"
           test "$(git -C .uc-mirror-previous rev-parse HEAD)" = "ecef151548736628cff62652a36be6eb1c7b1ad6"
           test "$(git -C .uc-mirror-current rev-parse HEAD)" = "bb090c470379542d38d24eea403832400c84a7b4"
-      - name: Compile Technical Art bridge and run existing bridge unit tests
+      - name: Compile Technical Art bridge and run bridge unit tests
         run: |
-          python -m compileall -q src tests tools/build_uc_bilateral_mirror_surface_bridge_evidence.py
+          python -m compileall -q src tests tools/build_uc_bilateral_mirror_surface_bridge_evidence.py tools/run_uc_bilateral_mirror_surface_bridge_evidence.py
           PYTHONPATH=src python -m unittest discover -s tests -p 'test_uc_bridge.py' -v
+          PYTHONPATH=src python -m unittest discover -s tests -p 'test_uc_transport_identity.py' -v
       - name: Regenerate exact bilateral source-successor base through Geometry owner
         run: |
           mkdir -p evidence/uc_bilateral_mirror_surface/base-producer
@@ -81,7 +82,7 @@ jobs:
               --rigging-head 94bc573e2e06ba7a35c9908c141e2f939d4739a8 \
               --uc-head b434a349cf159b392148b4dc9d68146573531a60 \
               --out evidence/uc_bilateral_mirror_surface/mirror-producer
-      - name: Build exact mirror-surface Geometry -> current UC -> GLB evidence
+      - name: Build exact mirror-surface Geometry -> portable receiver ID -> current UC -> GLB evidence
         env:
           AXM_ANIMAL_GEOMETRY_COMMIT: bdbb51303bd1b96866b06a71730ccc328bf4f2f6
           AXM_ANIMAL_GEOMETRY_CHECKOUT: ${{ github.workspace }}/.animal-geometry-mirror
@@ -91,7 +92,7 @@ jobs:
           AXM_PREVIOUS_UC_CHECKOUT: ${{ github.workspace }}/.uc-mirror-previous
           AXM_UC_COMMIT: bb090c470379542d38d24eea403832400c84a7b4
           AXM_UC_CHECKOUT: ${{ github.workspace }}/.uc-mirror-current
-        run: PYTHONPATH=src:.uc-mirror-current/src python tools/build_uc_bilateral_mirror_surface_bridge_evidence.py
+        run: PYTHONPATH=src:.uc-mirror-current/src python tools/run_uc_bilateral_mirror_surface_bridge_evidence.py
       - name: Retain exact checkout identities
         run: |
           git rev-parse HEAD > evidence/uc_bilateral_mirror_surface/technical-art-head.txt
@@ -101,6 +102,7 @@ jobs:
           git -C .uc-mirror-previous rev-parse HEAD:src/axm_uc/procedural_3d.py > evidence/uc_bilateral_mirror_surface/previous-uc-procedural-3d-blob.txt
           git -C .uc-mirror-current rev-parse HEAD:src/axm_uc/procedural_3d.py > evidence/uc_bilateral_mirror_surface/uc-procedural-3d-blob.txt
           grep -q 'PASS_BILATERAL_EXACT_MIRROR_SURFACE_TO_CURRENT_UC_GLB' evidence/uc_bilateral_mirror_surface/quadruped_bilateral_mirror_surface_uc_bridge.evidence.json
+          grep -q 'source_identity_rewritten.*false' evidence/uc_bilateral_mirror_surface/quadruped_bilateral_mirror_surface_uc_bridge.evidence.json
       - name: Upload exact mirror-surface static UC bridge evidence
         uses: actions/upload-artifact@v4
         with:
