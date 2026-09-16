@@ -1,0 +1,87 @@
+name: Rigging bilateral source-successor rebind evidence
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  rigging-bilateral-source-successor-rebind:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ['3.11', '3.13']
+    steps:
+      - name: Checkout exact Rigging head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          path: animal
+          fetch-depth: 0
+      - name: Prove exact bilateral Geometry ancestry
+        working-directory: animal
+        run: git merge-base --is-ancestor f89af95d621c36da3994c6660552da8bbc73fd1b HEAD
+      - name: Checkout exact Rigging plan donor
+        uses: actions/checkout@v4
+        with:
+          repository: mike-axiom-mir/axm-animal-design
+          ref: 04760112deb81a8d145226fe7ee02923107c9916
+          path: rig-donor
+      - name: Checkout exact historical weighting donor
+        uses: actions/checkout@v4
+        with:
+          repository: mike-axiom-mir/axm-animal-design
+          ref: 5625c9f796a75e8b441458c51093e55519490611
+          path: weighting-donor
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Verify exact donor checkouts
+        run: |
+          test "$(git -C rig-donor rev-parse HEAD)" = "04760112deb81a8d145226fe7ee02923107c9916"
+          test "$(git -C weighting-donor rev-parse HEAD)" = "5625c9f796a75e8b441458c51093e55519490611"
+      - name: Compile
+        working-directory: animal
+        run: python -m compileall -q src tests tools
+      - name: Run full inherited Animal test suite
+        working-directory: animal
+        env:
+          AXM_RIG_PLAN: ../rig-donor/examples/quadruped_rig_probe_001.json
+        run: python -m unittest discover -s tests -v
+      - name: Build exact bilateral Rigging deformation evidence
+        if: matrix.python-version == '3.11'
+        working-directory: animal
+        env:
+          PYTHONPATH: src
+        run: |
+          mkdir -p evidence/rigging-bilateral-source-successor-rebind-001
+          python tools/build_bilateral_source_successor_rigging_rebind_evidence.py \
+            --source examples/quadruped_neutral_001.json \
+            --left-profile examples/quadruped_elbow_source_successor_003.json \
+            --bilateral-profile examples/quadruped_elbow_bilateral_successor_003.json \
+            --rig-plan ../rig-donor/examples/quadruped_rig_probe_001.json \
+            --weighting-profile ../weighting-donor/examples/quadruped_weighting_refinement_001.json \
+            --geometry-head f89af95d621c36da3994c6660552da8bbc73fd1b \
+            --historical-left-rigging-head b48bb957622ed5c82a24ca4fcb471f7ee9b5147a \
+            --rig-donor-head 04760112deb81a8d145226fe7ee02923107c9916 \
+            --out evidence/rigging-bilateral-source-successor-rebind-001
+
+          test -s evidence/rigging-bilateral-source-successor-rebind-001/bilateral-source-successor-rigging-rebind-receipt.json
+          grep -q 'PASS_BILATERAL_SOURCE_SUCCESSOR_RIGGING_REBIND_DENSE_SWEEP' \
+            evidence/rigging-bilateral-source-successor-rebind-001/bilateral-source-successor-rigging-rebind-receipt.json
+          grep -q 'PASS_DENSE_BILATERAL_MIRROR_DEFORMATION_EQUIVALENCE' \
+            evidence/rigging-bilateral-source-successor-rebind-001/bilateral-source-successor-rigging-rebind-receipt.json
+          test "$(find evidence/rigging-bilateral-source-successor-rebind-001 -name '*.obj' | wc -l)" = "20"
+          git rev-parse HEAD > evidence/rigging-bilateral-source-successor-rebind-001/exact-head.txt
+          printf '%s\n' 'f89af95d621c36da3994c6660552da8bbc73fd1b' > evidence/rigging-bilateral-source-successor-rebind-001/geometry-bilateral-head.txt
+          printf '%s\n' '4df3024b4c459675422565501a46f622acf229a9' > evidence/rigging-bilateral-source-successor-rebind-001/organic-bilateral-head.txt
+          printf '%s\n' 'b48bb957622ed5c82a24ca4fcb471f7ee9b5147a' > evidence/rigging-bilateral-source-successor-rebind-001/historical-left-rigging-head.txt
+          printf '%s\n' '04760112deb81a8d145226fe7ee02923107c9916' > evidence/rigging-bilateral-source-successor-rebind-001/rig-plan-donor-head.txt
+          printf '%s\n' '5625c9f796a75e8b441458c51093e55519490611' > evidence/rigging-bilateral-source-successor-rebind-001/weighting-profile-donor-head.txt
+      - name: Upload exact bilateral Rigging evidence
+        if: ${{ always() && matrix.python-version == '3.11' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: animal-rigging-bilateral-source-successor-rebind-001-evidence
+          path: animal/evidence/rigging-bilateral-source-successor-rebind-001
+          if-no-files-found: error
+          retention-days: 30
