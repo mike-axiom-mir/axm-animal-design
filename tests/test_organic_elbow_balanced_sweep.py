@@ -58,23 +58,37 @@ class OrganicElbowBalancedDenseSweepTests(unittest.TestCase):
         self.assertEqual(len(POSE_SCHEDULE_DEG), 25)
         self.assertEqual(POSE_SCHEDULE_DEG[12], 0.0)
         self.assertEqual(
-            tuple(round(POSE_SCHEDULE_DEG[index + 1] - POSE_SCHEDULE_DEG[index], 12) for index in range(24)),
+            tuple(
+                round(POSE_SCHEDULE_DEG[index + 1] - POSE_SCHEDULE_DEG[index], 12)
+                for index in range(24)
+            ),
             (5.0,) * 24,
         )
-        self.assertEqual(WEIGHTING_PROFILES, ("smoothstep-v0", "ease-out-power-0p75-v1"))
+        self.assertEqual(
+            WEIGHTING_PROFILES,
+            ("smoothstep-v0", "ease-out-power-0p75-v1"),
+        )
 
     def test_dense_sweep_retains_exact_candidate_and_reports_all_samples(self):
         if not self.has_exact_plan:
             self.skipTest("exact PR #2 rig plan supplied only by evidence workflow")
         self.assertEqual(digest(SOURCE), SOURCE_DIGEST)
+        original_plan_digest = digest(self.plan)
         receipt = inspect_balanced_dense_sweep(SOURCE, self.plan)
+        self.assertEqual(digest(self.plan), original_plan_digest)
         self.assertEqual(receipt["schema"], EVIDENCE_SCHEMA)
         self.assertEqual(receipt["balanced_candidate_digest"], CANDIDATE_DIGEST)
         self.assertEqual(receipt["pose_schedule_deg"], list(POSE_SCHEDULE_DEG))
         self.assertEqual(receipt["pose_sample_count_per_profile"], 25)
         self.assertEqual(len(receipt["comparisons"]), 50)
-        self.assertEqual(receipt["observational_schedule_contract"]["source_rig_plan_mutated"], False)
-        self.assertEqual(receipt["observational_schedule_contract"]["copied_plan_pose_schedule_only"], True)
+        self.assertFalse(
+            receipt["observational_schedule_contract"]["source_rig_plan_mutated"]
+        )
+        self.assertTrue(
+            receipt["observational_schedule_contract"][
+                "observer_schedule_external_to_rig_plan"
+            ]
+        )
         self.assertIn(
             receipt["decision"],
             {
@@ -84,8 +98,12 @@ class OrganicElbowBalancedDenseSweepTests(unittest.TestCase):
             },
         )
         for profile in WEIGHTING_PROFILES:
-            rows = [row for row in receipt["comparisons"] if row["weighting"] == profile]
-            self.assertEqual([row["angle_deg"] for row in rows], list(POSE_SCHEDULE_DEG))
+            rows = [
+                row for row in receipt["comparisons"] if row["weighting"] == profile
+            ]
+            self.assertEqual(
+                [row["angle_deg"] for row in rows], list(POSE_SCHEDULE_DEG)
+            )
 
     def test_wrong_plan_fails_closed_before_sweep(self):
         if not self.has_exact_plan:
