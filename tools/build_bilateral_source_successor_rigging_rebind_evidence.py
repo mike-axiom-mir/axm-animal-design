@@ -21,6 +21,8 @@ from axm_animal_design.bilateral_source_successor_topology_rebind import (
 from axm_animal_design.connected_deformation import digest
 
 HISTORICAL_WEIGHTING_VERIFICATION_HEAD = "5625c9f796a75e8b441458c51093e55519490611"
+MIRROR_TOLERANCE = 1e-9
+SCOPED_RESULT = "PASS_BILATERAL_SOURCE_SUCCESSOR_RIGGING_REBIND_DENSE_SWEEPS__HOLD_EXACT_SURFACE_METRIC_MIRROR"
 
 
 def _write_obj(path: Path, positions, indices):
@@ -93,7 +95,7 @@ def _negative_controls(spec, left_profile, bilateral_profile, plan, weighting_pr
 
 def _diagnostic_summary(receipt):
     return {
-        "state": receipt["state"],
+        "raw_combined_state": receipt["state"],
         "left_baseline": receipt["left"]["baseline_summary"],
         "left_refined": receipt["left"]["refined_summary"],
         "right_baseline": receipt["right"]["baseline_summary"],
@@ -107,6 +109,38 @@ def _diagnostic_summary(receipt):
         "baseline_mirror_max_metric_residual": receipt["bilateral_mirror_evidence"]["smoothstep-v0"]["maximum_structural_metric_residual"],
         "refined_mirror_max_metric_residual": receipt["bilateral_mirror_evidence"]["ease-out-power-0p75-v1"]["maximum_structural_metric_residual"],
     }
+
+
+def _classify_scoped_result(receipt):
+    summaries = [
+        receipt[side][profile + "_summary"]
+        for side in ("left", "right")
+        for profile in ("baseline", "refined")
+    ]
+    dense_pass = all(row["gate"] == "PASS_BILATERAL_SIDE_DENSE_STRUCTURAL_SWEEP" for row in summaries)
+    weighting_pass = all(
+        receipt[side]["boundary_weighting_comparison"]["gate"]
+        == "PASS_WEIGHTING_REFINEMENT_RECONFIRMED_ON_BILATERAL_SUCCESSOR"
+        for side in ("left", "right")
+    )
+    mirror_rows = receipt["bilateral_mirror_evidence"]
+    pose_mirror_pass = all(
+        mirror_rows[profile]["maximum_mirrored_pose_residual_m"] <= MIRROR_TOLERANCE
+        for profile in ("smoothstep-v0", "ease-out-power-0p75-v1")
+    )
+    surface_metric_diverges = any(
+        mirror_rows[profile]["maximum_structural_metric_residual"] > MIRROR_TOLERANCE
+        for profile in ("smoothstep-v0", "ease-out-power-0p75-v1")
+    )
+    if not dense_pass:
+        raise SystemExit("one or more independent bilateral dense deformation sweeps failed")
+    if not weighting_pass:
+        raise SystemExit("historical weighting refinement did not reconfirm independently on both sides")
+    if not pose_mirror_pass:
+        raise SystemExit("mirrored vertex deformation diverged across the bilateral dense sweep")
+    if not surface_metric_diverges:
+        raise SystemExit("expected surface-metric HOLD vanished; update the scoped gate rather than silently broadening PASS")
+    return SCOPED_RESULT
 
 
 def main():
@@ -151,8 +185,7 @@ def main():
     )
     diagnostic = _diagnostic_summary(receipt)
     print("AXM_BILATERAL_RIGGING_DIAGNOSTIC=" + json.dumps(diagnostic, sort_keys=True))
-    if receipt["state"] != "PASS_BILATERAL_SOURCE_SUCCESSOR_RIGGING_REBIND_DENSE_SWEEP":
-        raise SystemExit("bilateral source-successor Rigging dense sweep did not pass")
+    scoped_result = _classify_scoped_result(receipt)
 
     left_candidate, right_candidate, geometry = build_bilateral_source_successor_topology_rebind(
         spec, left_profile, bilateral_profile
@@ -161,6 +194,16 @@ def main():
         spec, left_profile, bilateral_profile, plan, weighting_profile
     )
 
+    receipt["scoped_result"] = scoped_result
+    receipt["surface_metric_handoff"] = {
+        "owner": "Geometry / Topology",
+        "reason": "All corresponding posed vertices are exact Y=0 mirrors, but per-surface triangle/edge deformation extrema diverge because the accepted bilateral topology does not produce exact mirrored surface-metric equivalence under the retained correspondence.",
+        "baseline_maximum_structural_metric_residual": receipt["bilateral_mirror_evidence"]["smoothstep-v0"]["maximum_structural_metric_residual"],
+        "refined_maximum_structural_metric_residual": receipt["bilateral_mirror_evidence"]["ease-out-power-0p75-v1"]["maximum_structural_metric_residual"],
+        "baseline_maximum_mirrored_vertex_residual_m": receipt["bilateral_mirror_evidence"]["smoothstep-v0"]["maximum_mirrored_pose_residual_m"],
+        "refined_maximum_mirrored_vertex_residual_m": receipt["bilateral_mirror_evidence"]["ease-out-power-0p75-v1"]["maximum_mirrored_pose_residual_m"],
+        "rigging_acceptance_boundary": "Independent left/right Rigging dense sweeps and exact mirrored vertex deformation PASS; exact mirrored surface-metric equivalence remains HOLD and is not converted into a Rigging PASS.",
+    }
     receipt["lineage"] = {
         "repository": "mike-axiom-mir/axm-animal-design",
         "organic_bilateral_source_head": ORGANIC_BILATERAL_HEAD,
@@ -179,6 +222,7 @@ def main():
     receipt["negative_controls"] = negatives
     receipt["non_claims"] = [
         "Dense one-degree samples are finite structural observations, not a mathematical proof for every real-valued intermediate angle.",
+        "Exact mirrored vertex deformation is not claimed to imply exact mirrored triangulated surface strain; that surface metric remains explicitly held.",
         "No visual deformation quality, anatomy, muscle behavior, volume preservation or skin sliding is accepted.",
         "No Animation timing, clip, interpolation, playback or motion-direction acceptance is established.",
         "No exported skeleton/skin, engine controller, runtime playback, target-device performance or gameplay is established.",
@@ -210,14 +254,17 @@ def main():
                 )
 
     print(json.dumps({
-        "state": receipt["state"],
+        "raw_combined_state": receipt["state"],
+        "scoped_result": scoped_result,
         "total_dense_pose_observations": receipt["total_dense_pose_observations"],
+        "left_baseline": receipt["left"]["baseline_summary"],
         "left_refined": receipt["left"]["refined_summary"],
+        "right_baseline": receipt["right"]["baseline_summary"],
         "right_refined": receipt["right"]["refined_summary"],
-        "baseline_mirror": receipt["bilateral_mirror_evidence"]["smoothstep-v0"]["gate"],
-        "refined_mirror": receipt["bilateral_mirror_evidence"]["ease-out-power-0p75-v1"]["gate"],
         "baseline_mirror_max_pose_residual_m": receipt["bilateral_mirror_evidence"]["smoothstep-v0"]["maximum_mirrored_pose_residual_m"],
         "refined_mirror_max_pose_residual_m": receipt["bilateral_mirror_evidence"]["ease-out-power-0p75-v1"]["maximum_mirrored_pose_residual_m"],
+        "baseline_mirror_max_metric_residual": receipt["bilateral_mirror_evidence"]["smoothstep-v0"]["maximum_structural_metric_residual"],
+        "refined_mirror_max_metric_residual": receipt["bilateral_mirror_evidence"]["ease-out-power-0p75-v1"]["maximum_structural_metric_residual"],
         "negative_controls": negatives,
     }, sort_keys=True))
 
