@@ -1,0 +1,46 @@
+name: Connected chain topology evidence
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  topology:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ['3.11', '3.13']
+    steps:
+      - name: Checkout animal-design candidate
+        uses: actions/checkout@v4
+        with:
+          path: animal
+      - name: Checkout exact Universal Creation donor
+        uses: actions/checkout@v4
+        with:
+          repository: mike-axiom-mir/axm-universal-creation
+          ref: b434a349cf159b392148b4dc9d68146573531a60
+          path: uc
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Compile candidate and evidence builder
+        working-directory: animal
+        run: python -m compileall -q src tests tools
+      - name: Run animal-design unit tests
+        working-directory: animal
+        run: python -m unittest discover -s tests -v
+      - name: Re-test connected chain with pinned UC topology inspector
+        working-directory: animal
+        env:
+          PYTHONPATH: src:../uc/src
+          AXM_UC_CHECKOUT: github-actions:pinned-b434a349cf159b392148b4dc9d68146573531a60
+        run: python tools/build_topology_evidence.py
+      - name: Upload exact topology evidence
+        if: matrix.python-version == '3.11'
+        uses: actions/upload-artifact@v4
+        with:
+          name: front-left-connected-chain-001-topology-evidence
+          path: animal/evidence/topology/
+          if-no-files-found: error
