@@ -1,7 +1,7 @@
 from pathlib import Path
 import json
-import math
 import sys
+import xml.etree.ElementTree as ET
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
@@ -90,10 +90,13 @@ def _contact_sheet(path, frames, report):
     lines.append(
         f'<text x="16" y="{footer_y}" font-family="monospace" font-size="11">max adjacent vertex step={metrics["maximum_adjacent_vertex_step_m"]:.9f} m; '
         f'peak excursion={metrics["peak_vertex_excursion_from_neutral_m"]:.9f} m; '
-        f'step fraction={metrics["maximum_adjacent_step_fraction_of_peak_excursion"]:.6f} <= {metrics["step_fraction_limit"]:.2f}</text>'
+        f'step fraction={metrics["maximum_adjacent_step_fraction_of_peak_excursion"]:.6f} &lt;= {metrics["step_fraction_limit"]:.2f}</text>'
     )
     lines.append('</svg>')
-    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    svg_text = "\n".join(lines) + "\n"
+    # Fail the evidence build if the retained review surface is not valid XML/SVG.
+    ET.fromstring(svg_text)
+    path.write_text(svg_text, encoding="utf-8")
 
 
 report = inspect_temporal_continuity(SPEC, PLAN, CLIP)
