@@ -58,8 +58,16 @@ func vec2(row) -> Vector2:
 func angular_error_deg(expected: Vector3, observed: Vector3) -> float:
     if expected.length_squared() == 0.0 or observed.length_squared() == 0.0:
         return 180.0
-    var cosine := clampf(expected.normalized().dot(observed.normalized()), -1.0, 1.0)
-    return rad_to_deg(acos(cosine))
+    # acos(dot) loses useful precision for tiny packed-direction errors because
+    # GDScript Vector3 values are host floats and dot rounds extremely close to
+    # 1.0. atan2(|cross|, dot) measures the same angle without catastrophic
+    # cancellation near zero, so the angular gate reflects the actual bounded
+    # ArrayMesh direction reconstruction instead of a float-resolution floor.
+    var expected_unit := expected.normalized()
+    var observed_unit := observed.normalized()
+    var sine := expected_unit.cross(observed_unit).length()
+    var cosine := clampf(expected_unit.dot(observed_unit), -1.0, 1.0)
+    return rad_to_deg(atan2(sine, cosine))
 
 func build_mesh(side_payload: Dictionary, frame: Dictionary) -> ArrayMesh:
     var vertices := PackedVector3Array()
