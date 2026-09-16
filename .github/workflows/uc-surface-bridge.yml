@@ -103,11 +103,17 @@ jobs:
           repository: mike-axiom-mir/axm-animal-design
           ref: b10ec5aeeb02b5df8d42e13df2772f4dcaae9a3a
           path: .animal-animation
-      - name: Checkout pinned current Universal Creation
+      - name: Checkout previous proven Universal Creation runtime pin
         uses: actions/checkout@v4
         with:
           repository: mike-axiom-mir/axm-universal-creation
           ref: a05f5fb083ad1454a0d92d001e0d3994a779826f
+          path: .uc-animation-runtime-previous
+      - name: Checkout current Universal Creation
+        uses: actions/checkout@v4
+        with:
+          repository: mike-axiom-mir/axm-universal-creation
+          ref: bd51542bc68534a6e6f3a11d421dc70216b2abf9
           path: .uc-animation-runtime
       - name: Compile Technical Art animation bridge
         run: python -m compileall -q tools/build_uc_animation_clock_bridge_evidence.py
@@ -115,13 +121,19 @@ jobs:
         env:
           AXM_ANIMAL_ANIMATION_COMMIT: b10ec5aeeb02b5df8d42e13df2772f4dcaae9a3a
           AXM_ANIMAL_ANIMATION_CHECKOUT: .animal-animation
-          AXM_UC_COMMIT: a05f5fb083ad1454a0d92d001e0d3994a779826f
+          AXM_PREVIOUS_UC_COMMIT: a05f5fb083ad1454a0d92d001e0d3994a779826f
+          AXM_PREVIOUS_UC_CHECKOUT: .uc-animation-runtime-previous
+          AXM_UC_COMMIT: bd51542bc68534a6e6f3a11d421dc70216b2abf9
+          AXM_UC_CHECKOUT: .uc-animation-runtime
         run: PYTHONPATH=.uc-animation-runtime/src python tools/build_uc_animation_clock_bridge_evidence.py
       - name: Retain exact checkout identities
         run: |
           git rev-parse HEAD > evidence/uc_animation_clock/technical-art-head.txt
           git -C .animal-animation rev-parse HEAD > evidence/uc_animation_clock/animation-head.txt
+          git -C .uc-animation-runtime-previous rev-parse HEAD > evidence/uc_animation_clock/previous-uc-head.txt
           git -C .uc-animation-runtime rev-parse HEAD > evidence/uc_animation_clock/uc-head.txt
+          git -C .uc-animation-runtime-previous rev-parse HEAD:src/axm_uc/game_animation_runtime.py > evidence/uc_animation_clock/previous-uc-runtime-blob.txt
+          git -C .uc-animation-runtime rev-parse HEAD:src/axm_uc/game_animation_runtime.py > evidence/uc_animation_clock/uc-runtime-blob.txt
       - name: Upload Animal animation clock bridge evidence
         uses: actions/upload-artifact@v4
         with:
