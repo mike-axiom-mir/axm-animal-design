@@ -1,0 +1,81 @@
+name: Geometry bilateral logical-quad normal evidence
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  geometry-bilateral-logical-quad-normal-evidence:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      matrix:
+        python-version: ['3.11', '3.13']
+    steps:
+      - name: Checkout exact Geometry normal-field head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          path: animal
+          fetch-depth: 0
+
+      - name: Prove exact Materials-review parent and topology donor identity
+        working-directory: animal
+        run: |
+          git merge-base --is-ancestor 96e998e5c793057836e01656aca9f71481439c9b HEAD
+          git merge-base --is-ancestor bdbb51303bd1b96866b06a71730ccc328bf4f2f6 HEAD
+          test "$(git hash-object src/axm_animal_design/bilateral_mirror_surface_topology.py)" = "9a0ebcc6169445996756bb446a87e3baf8b9cc33"
+
+      - name: Checkout exact historical Rigging plan donor for inherited tests
+        uses: actions/checkout@v4
+        with:
+          repository: mike-axiom-mir/axm-animal-design
+          ref: 04760112deb81a8d145226fe7ee02923107c9916
+          path: rig-donor
+
+      - name: Verify exact Rigging donor checkout
+        run: test "$(git -C rig-donor rev-parse HEAD)" = "04760112deb81a8d145226fe7ee02923107c9916"
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Compile
+        working-directory: animal
+        run: python -m compileall -q src tests tools
+
+      - name: Run full inherited Animal suite
+        working-directory: animal
+        env:
+          AXM_RIG_PLAN: ../rig-donor/examples/quadruped_rig_probe_001.json
+        run: python -m unittest discover -s tests -v
+
+      - name: Build exact retained Geometry normal-field evidence
+        if: matrix.python-version == '3.11'
+        working-directory: animal
+        env:
+          PYTHONPATH: src
+        run: |
+          rm -rf evidence/geometry-bilateral-logical-quad-normal-001
+          python tools/build_bilateral_logical_quad_normal_evidence.py \
+            --source examples/quadruped_neutral_001.json \
+            --left-profile examples/quadruped_elbow_source_successor_003.json \
+            --bilateral-profile examples/quadruped_elbow_bilateral_successor_003.json \
+            --parent-head 96e998e5c793057836e01656aca9f71481439c9b \
+            --geometry-head bdbb51303bd1b96866b06a71730ccc328bf4f2f6 \
+            --geometry-module-blob 9a0ebcc6169445996756bb446a87e3baf8b9cc33 \
+            --exact-head "$(git rev-parse HEAD)" \
+            --out-dir evidence/geometry-bilateral-logical-quad-normal-001
+          grep -q 'PASS_BILATERAL_LOGICAL_QUAD_NORMAL_FIELD_CANDIDATE__TANGENTS_HELD' \
+            evidence/geometry-bilateral-logical-quad-normal-001/geometry-normal-evidence.json
+          grep -q 'PASS_POSITION_FIELD_DEPENDENCY_DETECTED' \
+            evidence/geometry-bilateral-logical-quad-normal-001/geometry-normal-evidence.json
+
+      - name: Upload exact Geometry normal-field evidence
+        if: ${{ always() && matrix.python-version == '3.11' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: animal-geometry-bilateral-logical-quad-normal-${{ github.event.pull_request.head.sha || github.sha }}
+          path: animal/evidence/geometry-bilateral-logical-quad-normal-001
+          if-no-files-found: error
+          retention-days: 30
