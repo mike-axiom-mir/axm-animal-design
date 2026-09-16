@@ -1,0 +1,160 @@
+name: Animation connected derivative diagnosis evidence
+
+on:
+  push:
+    branches:
+      - studio/animation-quadruped-articulation-loop-001
+    paths:
+      - "tools/build_connected_animation_rebind_evidence.py"
+      - "tools/build_connected_animation_derivative_diagnosis.py"
+      - "examples/quadruped_neutral_001.json"
+      - "examples/quadruped_rig_probe_001.json"
+      - "examples/quadruped_articulation_loop_001.json"
+      - ".github/workflows/animation-connected-derivative-diagnosis.yml"
+  pull_request:
+    paths:
+      - "tools/build_connected_animation_rebind_evidence.py"
+      - "tools/build_connected_animation_derivative_diagnosis.py"
+      - "examples/quadruped_neutral_001.json"
+      - "examples/quadruped_rig_probe_001.json"
+      - "examples/quadruped_articulation_loop_001.json"
+      - ".github/workflows/animation-connected-derivative-diagnosis.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  derivative-diagnosis:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out exact Animation lane head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+          path: animal
+
+      - name: Bind proof to exact successor head
+        working-directory: animal
+        shell: bash
+        run: |
+          set -euo pipefail
+          EXACT_HEAD_SHA="$(git rev-parse HEAD)"
+          echo "EXACT_HEAD_SHA=${EXACT_HEAD_SHA}" >> "$GITHUB_ENV"
+          if [ -n "${{ github.event.pull_request.head.sha }}" ]; then
+            test "${EXACT_HEAD_SHA}" = "${{ github.event.pull_request.head.sha }}"
+          else
+            test "${EXACT_HEAD_SHA}" = "${GITHUB_SHA}"
+          fi
+          git merge-base --is-ancestor 35b66e9bd1596e5e593b8fc5893b189184e5f0e1 HEAD
+
+      - name: Check out exact connected Rigging donor
+        uses: actions/checkout@v4
+        with:
+          repository: mike-axiom-mir/axm-animal-design
+          ref: f4614ab2f691cd5c5d12b88fabc38ef848acd24e
+          path: connected-donor
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Preserve receiving repository gates
+        working-directory: animal
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m compileall -q src tests tools
+          python -m unittest discover -s tests -v
+
+      - name: Rebuild exact connected 41-sample motion prerequisite
+        working-directory: animal
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf evidence/animation-connected-forelimb-motion-001
+          python tools/build_connected_animation_rebind_evidence.py \
+            --source examples/quadruped_neutral_001.json \
+            --rig-plan examples/quadruped_rig_probe_001.json \
+            --clip examples/quadruped_articulation_loop_001.json \
+            --connected-donor-root ../connected-donor \
+            --connected-donor-head f4614ab2f691cd5c5d12b88fabc38ef848acd24e \
+            --out evidence/animation-connected-forelimb-motion-001
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          root = Path('evidence/animation-connected-forelimb-motion-001')
+          receipt = json.loads((root / 'connected_forelimb_motion_receipt.json').read_text())
+          frames = json.loads((root / 'connected_forelimb_motion_frames.json').read_text())
+          assert receipt['gate'] == 'PASS_EXACT_CONNECTED_FORELIMB_41_SAMPLE_MOTION_REBIND', receipt
+          assert receipt['source_identity']['rig_weighting_profile'] == 'smoothstep-v0', receipt
+          assert receipt['connected_rigging_donor']['git_head'] == 'f4614ab2f691cd5c5d12b88fabc38ef848acd24e', receipt
+          assert receipt['connected_rigging_donor']['candidate_digest'] == '6e620ce4b1d810b259011d0d22d38ba7c7eea0e2500177df2bf28e08fe1caf6c', receipt
+          assert len(frames['frames']) == 41, frames
+          assert frames['frames'][0]['positions'] == frames['frames'][40]['positions'], frames
+          PY
+
+      - name: Diagnose every authored-boundary velocity join without changing motion
+        working-directory: animal
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf evidence/animation-connected-derivative-diagnosis-001
+          python tools/build_connected_animation_derivative_diagnosis.py
+          python - <<'PY'
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+          root = Path('evidence/animation-connected-derivative-diagnosis-001')
+          payload_path = root / 'quadruped_connected_derivative_diagnosis.json'
+          summary_path = root / 'quadruped_connected_derivative_diagnosis_summary.json'
+          svg_path = root / 'quadruped_connected_derivative_diagnosis.svg'
+          payload = json.loads(payload_path.read_text())
+          summary = json.loads(summary_path.read_text())
+          exact_head = os.environ['EXACT_HEAD_SHA']
+          assert payload['gate'] == 'PASS_CONNECTED_C1_DISCONTINUITY_DIAGNOSIS_C0_INTERPOLANT_UNCHANGED', payload
+          assert summary['gate'] == payload['gate'], summary
+          assert payload['receiving_repository']['git_head'] == exact_head, payload
+          assert summary['receiving_repository']['git_head'] == exact_head, summary
+          assert summary['payload_sha256'] == hashlib.sha256(payload_path.read_bytes()).hexdigest(), summary
+          identity = payload['source_identity']
+          assert identity['source_digest'] == '9becd2dea714d662e23386aacabd0fa99abd11ff3c08aad7d242138e654f932b', identity
+          assert identity['rig_plan_digest'] == 'b1f39ef8cd127edf9288b89ebd1f1fc14e6a3ceb8b0db58fa0ba9b12bc892aa8', identity
+          assert identity['clip_digest'] == '407903cbc5fe8803fc6a749e128b7736ebf139b414e61f77d9bbd32fc46f427b', identity
+          assert identity['rig_weighting_profile'] == 'smoothstep-v0', identity
+          assert identity['connected_candidate_digest'] == '6e620ce4b1d810b259011d0d22d38ba7c7eea0e2500177df2bf28e08fe1caf6c', identity
+          diagnosed = payload['diagnosed_motion']
+          assert diagnosed['motion_changed'] is False, diagnosed
+          assert diagnosed['smoothing_candidate_authored'] is False, diagnosed
+          assert diagnosed['loop_boundaries_diagnosed'] == 40, diagnosed
+          assert diagnosed['vertex_count'] == 42, diagnosed
+          metrics = payload['summary']
+          assert metrics['boundaries_with_nonzero_vertex_velocity_jump'] > 0, metrics
+          assert metrics['maximum_vertex_velocity_jump_m_per_s'] > 0.0, metrics
+          assert len(payload['boundaries']) == 40, len(payload['boundaries'])
+          controls = payload['negative_and_sanity_controls']
+          assert controls['constant_velocity_control'] == 'PASS_ZERO_JUMP', controls
+          assert controls['direction_change_control'] == 'PASS_NONZERO_JUMP_DETECTED', controls
+          assert svg_path.stat().st_size > 1000, svg_path.stat().st_size
+          boundary = ' '.join(payload['truth']['does_not_prove']).lower()
+          assert 'visually unacceptable' in boundary, boundary
+          assert 'controller' in boundary and 'gameplay' in boundary and 'wall-clock' in boundary, boundary
+          print(json.dumps(summary, indent=2))
+          PY
+
+      - name: Upload exact connected derivative diagnosis
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: quadruped-connected-derivative-diagnosis-${{ env.EXACT_HEAD_SHA }}
+          path: |
+            animal/evidence/animation-connected-derivative-diagnosis-001/quadruped_connected_derivative_diagnosis.json
+            animal/evidence/animation-connected-derivative-diagnosis-001/quadruped_connected_derivative_diagnosis_summary.json
+            animal/evidence/animation-connected-derivative-diagnosis-001/quadruped_connected_derivative_diagnosis.svg
+            animal/evidence/animation-connected-forelimb-motion-001/connected_forelimb_motion_receipt.json
+            animal/evidence/animation-connected-forelimb-motion-001/connected_forelimb_motion_frames.json
+          if-no-files-found: warn
+          retention-days: 30
