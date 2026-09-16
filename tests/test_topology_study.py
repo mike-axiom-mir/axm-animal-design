@@ -6,7 +6,11 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from axm_animal_design.topology_study import build_connected_chain, derive_shared_ring_radii
+from axm_animal_design.topology_study import (
+    build_connected_chain,
+    derive_shared_ring_radii,
+    inspect_vertex_fan_connectivity,
+)
 
 
 class ConnectedChainTests(unittest.TestCase):
@@ -55,6 +59,44 @@ class ConnectedChainTests(unittest.TestCase):
         self.assertEqual(len(first["indices"]) // 3, 80)
         self.assertTrue(all(0 <= index < len(first["positions"]) for index in first["indices"]))
 
+    def test_connected_chain_has_one_indexed_fan_per_vertex(self):
+        mesh = build_connected_chain("front-left-connected", self.points, self.radii)
+        report = inspect_vertex_fan_connectivity(mesh["positions"], mesh["indices"])
+        self.assertEqual(report["status"], "PASS_CONNECTED_VERTEX_FANS")
+        self.assertEqual(report["isolated_vertex_count"], 0)
+        self.assertEqual(report["disconnected_vertex_fan_count"], 0)
+        self.assertEqual(report["max_vertex_fan_components"], 1)
+        self.assertTrue(report["truth_boundary"]["indexed_vertex_fan_connectivity_checked"])
+        self.assertFalse(report["truth_boundary"]["self_intersection_checked"])
+
+    def test_vertex_fan_diagnostic_catches_bow_tie_vertex(self):
+        positions = [
+            [0, 0, 0],
+            [1, 0, 0],
+            [0, 1, 0],
+            [0, 0, 1],
+            [-1, 0, 0],
+            [0, -1, 0],
+            [0, 0, -1],
+        ]
+        indices = [
+            0, 2, 1,
+            0, 1, 3,
+            1, 2, 3,
+            2, 0, 3,
+            0, 4, 5,
+            0, 6, 4,
+            4, 6, 5,
+            5, 6, 0,
+        ]
+        report = inspect_vertex_fan_connectivity(positions, indices)
+        self.assertEqual(report["status"], "DISCONNECTED_OR_ISOLATED_VERTEX_FANS")
+        self.assertEqual(report["isolated_vertex_count"], 0)
+        self.assertEqual(report["disconnected_vertex_fan_count"], 1)
+        self.assertEqual(report["max_vertex_fan_components"], 2)
+        self.assertEqual(report["examples"]["disconnected_vertex_fans"][0]["vertex"], 0)
+        self.assertEqual(report["examples"]["disconnected_vertex_fans"][0]["fan_component_count"], 2)
+
     def test_every_triangle_has_nonzero_area(self):
         mesh = build_connected_chain("front-left-connected", self.points, self.radii)
         positions = mesh["positions"]
@@ -79,6 +121,10 @@ class ConnectedChainTests(unittest.TestCase):
             build_connected_chain("x", [[0, 0, 0], [1, 0, 0]], [0.1, -0.1])
         with self.assertRaises(ValueError):
             build_connected_chain("x", [[0, 0, 0], [1, 0, 0]], [0.1, 0.1], segments=5)
+        with self.assertRaises(ValueError):
+            inspect_vertex_fan_connectivity([[0, 0, 0]], [0, 0, 0])
+        with self.assertRaises(ValueError):
+            inspect_vertex_fan_connectivity([[0, 0, 0], [1, 0, 0], [0, 1, 0]], [0, 1])
 
 
 if __name__ == "__main__":
