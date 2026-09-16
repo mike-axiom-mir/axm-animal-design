@@ -1,0 +1,85 @@
+name: Connected chain ring phase evidence
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  ring-phase:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.13"]
+
+    steps:
+      - name: Checkout exact receiving head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          path: receiving
+
+      - name: Checkout exact rig-plan donor
+        uses: actions/checkout@v4
+        with:
+          repository: mike-axiom-mir/axm-animal-design
+          ref: 04760112deb81a8d145226fe7ee02923107c9916
+          path: rig-plan-donor
+
+      - name: Checkout exact connected-deformation donor
+        uses: actions/checkout@v4
+        with:
+          repository: mike-axiom-mir/axm-animal-design
+          ref: f4614ab2f691cd5c5d12b88fabc38ef848acd24e
+          path: deformation-donor
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Compile changed Python
+        working-directory: receiving
+        run: |
+          python -m py_compile \
+            src/axm_animal_design/ring_phase_study.py \
+            tools/build_ring_phase_evidence.py \
+            tests/test_ring_phase_study.py
+
+      - name: Run ring-phase unit tests
+        working-directory: receiving
+        run: python -m unittest discover -s tests -p 'test_ring_phase_study.py' -v
+
+      - name: Build exact retained evidence
+        if: matrix.python-version == '3.11'
+        working-directory: receiving
+        env:
+          EXACT_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          python tools/build_ring_phase_evidence.py \
+            --source examples/quadruped_neutral_001.json \
+            --rig-plan ../rig-plan-donor/examples/quadruped_rig_probe_001.json \
+            --deformation-donor ../deformation-donor/src/axm_animal_design/connected_deformation.py \
+            --rig-plan-ref 04760112deb81a8d145226fe7ee02923107c9916 \
+            --deformation-ref f4614ab2f691cd5c5d12b88fabc38ef848acd24e \
+            --exact-head "$EXACT_HEAD" \
+            --output-dir evidence/ring-phase-001
+
+      - name: Verify exact-head binding
+        if: matrix.python-version == '3.11'
+        working-directory: receiving
+        env:
+          EXACT_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          test "$(cat evidence/ring-phase-001/exact-head.txt)" = "$EXACT_HEAD"
+
+      - name: Upload retained evidence
+        if: matrix.python-version == '3.11'
+        uses: actions/upload-artifact@v4
+        with:
+          name: front-left-connected-chain-ring-phase-001-evidence
+          path: receiving/evidence/ring-phase-001
+          if-no-files-found: error
