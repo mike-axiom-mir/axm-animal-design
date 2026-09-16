@@ -84,3 +84,47 @@ jobs:
           name: quadruped-connected-topology-uc-bridge-evidence
           path: evidence/uc_connected_topology/
           if-no-files-found: error
+
+  animal-animation-current-uc-clock-bridge:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout exact Technical Art head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Checkout exact Animal Animation producer
+        uses: actions/checkout@v4
+        with:
+          repository: mike-axiom-mir/axm-animal-design
+          ref: b10ec5aeeb02b5df8d42e13df2772f4dcaae9a3a
+          path: .animal-animation
+      - name: Checkout pinned current Universal Creation
+        uses: actions/checkout@v4
+        with:
+          repository: mike-axiom-mir/axm-universal-creation
+          ref: a05f5fb083ad1454a0d92d001e0d3994a779826f
+          path: .uc-animation-runtime
+      - name: Compile Technical Art animation bridge
+        run: python -m compileall -q tools/build_uc_animation_clock_bridge_evidence.py
+      - name: Build exact Animal sampled playback -> current UC runtime clock evidence
+        env:
+          AXM_ANIMAL_ANIMATION_COMMIT: b10ec5aeeb02b5df8d42e13df2772f4dcaae9a3a
+          AXM_ANIMAL_ANIMATION_CHECKOUT: .animal-animation
+          AXM_UC_COMMIT: a05f5fb083ad1454a0d92d001e0d3994a779826f
+        run: PYTHONPATH=.uc-animation-runtime/src python tools/build_uc_animation_clock_bridge_evidence.py
+      - name: Retain exact checkout identities
+        run: |
+          git rev-parse HEAD > evidence/uc_animation_clock/technical-art-head.txt
+          git -C .animal-animation rev-parse HEAD > evidence/uc_animation_clock/animation-head.txt
+          git -C .uc-animation-runtime rev-parse HEAD > evidence/uc_animation_clock/uc-head.txt
+      - name: Upload Animal animation clock bridge evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: quadruped-animation-current-uc-clock-bridge-evidence
+          path: evidence/uc_animation_clock/
+          if-no-files-found: error
