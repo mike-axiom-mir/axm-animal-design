@@ -44,6 +44,13 @@ jobs:
             --rig-plan ../rig-donor/examples/quadruped_rig_probe_001.json \
             --rig-donor-head 04760112deb81a8d145226fe7ee02923107c9916 \
             --out evidence/organic-elbow-relief-001
+          python tools/build_organic_elbow_relief_perspective_review.py \
+            --evidence-dir evidence/organic-elbow-relief-001
+          test -s evidence/organic-elbow-relief-001/perspective-review-receipt.json
+          test -s evidence/organic-elbow-relief-001/baseline-vs-elbow-relief-perspective-outer-three-quarter.svg
+          test -s evidence/organic-elbow-relief-001/baseline-vs-elbow-relief-perspective-bend-profile.svg
+          grep -q 'PASS_LOCKED_CAMERA_PERSPECTIVE_REVIEW_EVIDENCE' \
+            evidence/organic-elbow-relief-001/perspective-review-receipt.json
           git rev-parse HEAD > evidence/organic-elbow-relief-001/exact-head.txt
           printf '%s\n' 'f4614ab2f691cd5c5d12b88fabc38ef848acd24e' > evidence/organic-elbow-relief-001/rigging-pr6-base-head.txt
           printf '%s\n' '04760112deb81a8d145226fe7ee02923107c9916' > evidence/organic-elbow-relief-001/rig-donor-head.txt
