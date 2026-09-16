@@ -3,15 +3,31 @@ extends SceneTree
 const PAYLOAD_PATH := "res://generated/tangent_motion_payload.json"
 const RECEIPT_PATH := "res://generated/tangent_motion_godot_receipt.json"
 const POSITION_TOLERANCE := 0.000001
-const VECTOR_TOLERANCE := 0.000001
 const UV_TOLERANCE := 0.000001
+const SCALAR_TOLERANCE := 0.000001
+# Godot 4.7.2 ArrayMesh readback stores normals/tangents through its packed
+# direction representation. The first exact-host attempt proved that requiring
+# 1e-6 component/vector identity was false precision: positions/UVs/w remained
+# exact while only direction vectors showed bounded ~1e-4 reconstruction error.
+# Keep that failed receipt as evidence and use an explicit, tight host-storage
+# envelope rather than silently calling the packed vectors exact.
+const PACKED_DIRECTION_TOLERANCE := 0.00025
+const PACKED_DIRECTION_ANGLE_TOLERANCE_DEG := 0.015
 
 var receipt := {
     "schema": "axm.animal-animation-godot-tangent-motion-readback/v0.1",
     "proof_runtime": "Godot 4.7.2",
     "proof_mode": "DETERMINISTIC_AUTHORED_SAMPLE_ATTRIBUTE_APPLICATION_NOT_REALTIME_PACING",
     "promotion_effect": "NONE",
-    "truth_boundary": "This proof creates Godot ArrayMesh surfaces from the exact Animation-bound Rigging position/normal/UV/tangent frames and reads those attributes back. It does not establish shaded deformation quality, tangent-space normal-map appearance, production skin tangent transport, continuous interpolation, real-time pacing, exported animation/skeleton transport, controller/state-machine behavior, gameplay, target-device performance, CANON, or production readiness."
+    "host_storage_boundary": {
+        "position_tolerance_m": POSITION_TOLERANCE,
+        "uv_tolerance": UV_TOLERANCE,
+        "scalar_and_unit_length_tolerance": SCALAR_TOLERANCE,
+        "packed_direction_vector_tolerance": PACKED_DIRECTION_TOLERANCE,
+        "packed_direction_angle_tolerance_deg": PACKED_DIRECTION_ANGLE_TOLERANCE_DEG,
+        "claim": "BOUNDED_GODOT_ARRAYMESH_DIRECTION_RECONSTRUCTION_NOT_EXACT_DIRECTION_FLOAT_IDENTITY"
+    },
+    "truth_boundary": "This proof creates Godot ArrayMesh surfaces from the exact Animation-bound Rigging position/normal/UV/tangent frames and reads those attributes back within an explicit host storage envelope. It does not establish shaded deformation quality, tangent-space normal-map appearance, production skin tangent transport, continuous interpolation, real-time pacing, exported animation/skeleton transport, controller/state-machine behavior, gameplay, target-device performance, CANON, or production readiness."
 }
 
 func write_receipt() -> void:
@@ -38,6 +54,12 @@ func vec3(row) -> Vector3:
 
 func vec2(row) -> Vector2:
     return Vector2(float(row[0]), float(row[1]))
+
+func angular_error_deg(expected: Vector3, observed: Vector3) -> float:
+    if expected.length_squared() == 0.0 or observed.length_squared() == 0.0:
+        return 180.0
+    var cosine := clampf(expected.normalized().dot(observed.normalized()), -1.0, 1.0)
+    return rad_to_deg(acos(cosine))
 
 func build_mesh(side_payload: Dictionary, frame: Dictionary) -> ArrayMesh:
     var vertices := PackedVector3Array()
@@ -87,8 +109,10 @@ func attribute_errors(mesh: ArrayMesh, side_payload: Dictionary, frame: Dictiona
         return {"state": "FAIL", "reason": "attribute-count"}
     var max_position := 0.0
     var max_normal := 0.0
+    var max_normal_angle_deg := 0.0
     var max_uv := 0.0
     var max_tangent_xyz := 0.0
+    var max_tangent_angle_deg := 0.0
     var max_tangent_w := 0.0
     var max_tangent_normal_dot := 0.0
     var max_normal_unit_error := 0.0
@@ -101,8 +125,10 @@ func attribute_errors(mesh: ArrayMesh, side_payload: Dictionary, frame: Dictiona
         var observed_tangent := Vector3(tangents[index * 4], tangents[index * 4 + 1], tangents[index * 4 + 2])
         max_position = maxf(max_position, vertices[index].distance_to(expected_position))
         max_normal = maxf(max_normal, normals[index].distance_to(expected_normal))
+        max_normal_angle_deg = maxf(max_normal_angle_deg, angular_error_deg(expected_normal, normals[index]))
         max_uv = maxf(max_uv, uvs[index].distance_to(expected_uv))
         max_tangent_xyz = maxf(max_tangent_xyz, observed_tangent.distance_to(expected_tangent))
+        max_tangent_angle_deg = maxf(max_tangent_angle_deg, angular_error_deg(expected_tangent, observed_tangent))
         max_tangent_w = maxf(max_tangent_w, absf(tangents[index * 4 + 3] - float(expected_tangents[index][3])))
         max_tangent_normal_dot = maxf(max_tangent_normal_dot, absf(normals[index].dot(observed_tangent)))
         max_normal_unit_error = maxf(max_normal_unit_error, absf(normals[index].length() - 1.0))
@@ -115,8 +141,10 @@ func attribute_errors(mesh: ArrayMesh, side_payload: Dictionary, frame: Dictiona
         "state": "PASS",
         "maximum_position_readback_error_m": max_position,
         "maximum_normal_readback_error": max_normal,
+        "maximum_normal_angular_error_deg": max_normal_angle_deg,
         "maximum_uv_readback_error": max_uv,
         "maximum_tangent_xyz_readback_error": max_tangent_xyz,
+        "maximum_tangent_angular_error_deg": max_tangent_angle_deg,
         "maximum_tangent_w_readback_error": max_tangent_w,
         "maximum_tangent_normal_dot_abs": max_tangent_normal_dot,
         "maximum_normal_unit_length_error": max_normal_unit_error,
@@ -150,8 +178,10 @@ func _initialize() -> void:
 
     var maximum_position := 0.0
     var maximum_normal := 0.0
+    var maximum_normal_angle_deg := 0.0
     var maximum_uv := 0.0
     var maximum_tangent_xyz := 0.0
+    var maximum_tangent_angle_deg := 0.0
     var maximum_tangent_w := 0.0
     var maximum_tangent_normal_dot := 0.0
     var maximum_normal_unit_error := 0.0
@@ -168,8 +198,10 @@ func _initialize() -> void:
             return
         var side_max_position := 0.0
         var side_max_normal := 0.0
+        var side_max_normal_angle_deg := 0.0
         var side_max_uv := 0.0
         var side_max_tangent := 0.0
+        var side_max_tangent_angle_deg := 0.0
         for sample_index in range(41):
             var frame: Dictionary = frames[sample_index]
             if int(frame.get("sample_index", -1)) != sample_index:
@@ -182,12 +214,16 @@ func _initialize() -> void:
                 return
             side_max_position = maxf(side_max_position, float(observed["maximum_position_readback_error_m"]))
             side_max_normal = maxf(side_max_normal, float(observed["maximum_normal_readback_error"]))
+            side_max_normal_angle_deg = maxf(side_max_normal_angle_deg, float(observed["maximum_normal_angular_error_deg"]))
             side_max_uv = maxf(side_max_uv, float(observed["maximum_uv_readback_error"]))
             side_max_tangent = maxf(side_max_tangent, float(observed["maximum_tangent_xyz_readback_error"]))
+            side_max_tangent_angle_deg = maxf(side_max_tangent_angle_deg, float(observed["maximum_tangent_angular_error_deg"]))
             maximum_position = maxf(maximum_position, float(observed["maximum_position_readback_error_m"]))
             maximum_normal = maxf(maximum_normal, float(observed["maximum_normal_readback_error"]))
+            maximum_normal_angle_deg = maxf(maximum_normal_angle_deg, float(observed["maximum_normal_angular_error_deg"]))
             maximum_uv = maxf(maximum_uv, float(observed["maximum_uv_readback_error"]))
             maximum_tangent_xyz = maxf(maximum_tangent_xyz, float(observed["maximum_tangent_xyz_readback_error"]))
+            maximum_tangent_angle_deg = maxf(maximum_tangent_angle_deg, float(observed["maximum_tangent_angular_error_deg"]))
             maximum_tangent_w = maxf(maximum_tangent_w, float(observed["maximum_tangent_w_readback_error"]))
             maximum_tangent_normal_dot = maxf(maximum_tangent_normal_dot, float(observed["maximum_tangent_normal_dot_abs"]))
             maximum_normal_unit_error = maxf(maximum_normal_unit_error, float(observed["maximum_normal_unit_length_error"]))
@@ -198,43 +234,37 @@ func _initialize() -> void:
             "sample_applications": 41,
             "maximum_position_readback_error_m": side_max_position,
             "maximum_normal_readback_error": side_max_normal,
+            "maximum_normal_angular_error_deg": side_max_normal_angle_deg,
             "maximum_uv_readback_error": side_max_uv,
-            "maximum_tangent_xyz_readback_error": side_max_tangent
+            "maximum_tangent_xyz_readback_error": side_max_tangent,
+            "maximum_tangent_angular_error_deg": side_max_tangent_angle_deg
         }
 
-    if maximum_position > POSITION_TOLERANCE or maximum_normal > VECTOR_TOLERANCE or maximum_uv > UV_TOLERANCE or maximum_tangent_xyz > VECTOR_TOLERANCE or maximum_tangent_w > VECTOR_TOLERANCE or maximum_tangent_normal_dot > VECTOR_TOLERANCE or maximum_normal_unit_error > VECTOR_TOLERANCE or maximum_tangent_unit_error > VECTOR_TOLERANCE or index_mismatches != 0:
-        receipt["attribute_readback"] = {
-            "applications": applications,
-            "maximum_position_readback_error_m": maximum_position,
-            "maximum_normal_readback_error": maximum_normal,
-            "maximum_uv_readback_error": maximum_uv,
-            "maximum_tangent_xyz_readback_error": maximum_tangent_xyz,
-            "maximum_tangent_w_readback_error": maximum_tangent_w,
-            "maximum_tangent_normal_dot_abs": maximum_tangent_normal_dot,
-            "maximum_normal_unit_length_error": maximum_normal_unit_error,
-            "maximum_tangent_unit_length_error": maximum_tangent_unit_error,
-            "index_mismatch_count": index_mismatches,
-            "sides": side_summaries
-        }
-        fail("Godot attribute readback tolerance exceeded")
-        return
-
-    receipt["state"] = "PASS_GODOT_BILATERAL_DEFORMED_TANGENT_MOTION_ATTRIBUTE_READBACK"
-    receipt["attribute_readback"] = {
+    var boundary := {
         "applications": applications,
         "maximum_position_readback_error_m": maximum_position,
         "maximum_normal_readback_error": maximum_normal,
+        "maximum_normal_angular_error_deg": maximum_normal_angle_deg,
         "maximum_uv_readback_error": maximum_uv,
         "maximum_tangent_xyz_readback_error": maximum_tangent_xyz,
+        "maximum_tangent_angular_error_deg": maximum_tangent_angle_deg,
         "maximum_tangent_w_readback_error": maximum_tangent_w,
         "maximum_tangent_normal_dot_abs": maximum_tangent_normal_dot,
         "maximum_normal_unit_length_error": maximum_normal_unit_error,
         "maximum_tangent_unit_length_error": maximum_tangent_unit_error,
         "index_mismatch_count": index_mismatches,
-        "sides": side_summaries,
-        "real_time_frame_pacing_claimed": false,
-        "interpolation_claimed": false,
-        "shaded_visual_quality_claimed": false
+        "sides": side_summaries
     }
+    receipt["attribute_readback"] = boundary
+
+    if maximum_position > POSITION_TOLERANCE or maximum_normal > PACKED_DIRECTION_TOLERANCE or maximum_normal_angle_deg > PACKED_DIRECTION_ANGLE_TOLERANCE_DEG or maximum_uv > UV_TOLERANCE or maximum_tangent_xyz > PACKED_DIRECTION_TOLERANCE or maximum_tangent_angle_deg > PACKED_DIRECTION_ANGLE_TOLERANCE_DEG or maximum_tangent_w > SCALAR_TOLERANCE or maximum_tangent_normal_dot > PACKED_DIRECTION_TOLERANCE or maximum_normal_unit_error > SCALAR_TOLERANCE or maximum_tangent_unit_error > SCALAR_TOLERANCE or index_mismatches != 0:
+        fail("Godot attribute readback exceeded explicit host storage envelope")
+        return
+
+    receipt["state"] = "PASS_GODOT_BILATERAL_DEFORMED_TANGENT_MOTION_ATTRIBUTE_READBACK"
+    boundary["real_time_frame_pacing_claimed"] = false
+    boundary["interpolation_claimed"] = false
+    boundary["shaded_visual_quality_claimed"] = false
+    boundary["exact_direction_float_identity_claimed"] = false
     write_receipt()
     quit(0)
