@@ -2,49 +2,89 @@
 
 Status: EXPERIMENTAL TECHNICAL-ART INTEGRATION
 
-This bridge exists because the first animal-design form study and Universal Creation were using the same `axm.surface-3d/v0.1` label while not actually sharing the same wire contract.
+This bridge exists because animal-design and Universal Creation can share a portable surface label while still having different source conventions, evidence ownership and revision identities. The bridge makes those boundaries explicit rather than treating a matching schema name as proof of integration.
 
-The animal form evidence is authored in metres with `+X forward, +Y left, +Z up`, keeps `units` inside its local surface packet, omits the UC-required surface `name`, and carries neutral material color as linear `base_color` RGBA values. Universal Creation's portable surface/GLB path expects metres in its Y-up / +Z-forward visual convention, a top-level surface `name`, and `material.color` as `#RRGGBB[AA]` text.
+The animal source convention is metres with `+X forward, +Y left, +Z up`. Universal Creation's portable surface/GLB path uses metres in its Y-up / +Z-forward convention, requires a top-level surface `name`, and carries material color as `#RRGGBB[AA]` text.
 
-Silently feeding the local packet into UC would therefore be false integration. It would either fail schema validation or, after a superficial key repair, place the geometry in the wrong coordinate convention.
+## Historical form-study bridge
 
-## Bounded adapter
-
-`axm_animal_design.uc_bridge.adapt_form_evidence_for_uc()` performs one explicit source-owned conversion:
+`axm_animal_design.uc_bridge.adapt_form_evidence_for_uc()` preserves the original first-pass Technical Art path for the disconnected organic form study:
 
 - validates exact animal evidence identity and refuses unknown coordinate systems or units;
 - maps `[x_forward, y_left, z_up] -> [-y_left, z_up, x_forward]`;
 - reverses every triangle winding because this source-to-target map changes handedness;
 - transforms normals through the same axis map;
 - preserves vertex colors and PBR scalar factors;
-- converts the local linear `base_color` RGBA into UC's bounded hex material field;
-- adds the UC-required surface name and removes the local-only `units` key from the wire packet;
+- converts local linear `base_color` RGBA into UC's bounded hex material field;
+- adds the UC-required surface name and removes local-only `units` from the wire packet;
 - never changes the original organic-form evidence in place.
 
-The adapter remains in `axm-animal-design`. Universal Creation is not widened to understand animal landmarks, anatomy, bend zones, or this repository's local evidence schema.
-
-## Exact cross-repo proof
-
-`.github/workflows/uc-surface-bridge.yml` checks out the exact animal candidate plus pinned Universal Creation commit:
+The historical workflow remains pinned to Universal Creation commit:
 
 `640bd7dc177b90e023aad879b4c00051df7f4ee3`
 
-The workflow then:
+That evidence remains valid for that exact disconnected form-study lineage and is not relabelled as connected-topology evidence.
 
-1. runs focused bridge regressions;
-2. rebuilds the exact quadruped form study;
-3. converts its local surface packet into strict UC surface input;
-4. publishes the result through UC's real `publish_glb()` path;
-5. re-verifies the emitted GLB with UC's `verify_glb()` using the exact normalized specification digest;
-6. requires source and verified GLB triangle counts to remain equal;
-7. retains the canonicalized surface JSON, GLB bytes, and bridge receipt as one CI artifact.
+## Connected Geometry successor bridge
 
-This is a real pipeline proof, not a copy of UC's validation logic inside animal-design.
+Geometry PR #4 later produced a separate source-derived connected forelimb candidate. Technical Art therefore adds a successor transport path rather than silently substituting that candidate into the historical form-study receipt.
+
+Exact Geometry producer revision:
+
+`feb4b24cd36bcc879173138d240754f71db34834`
+
+Exact candidate identity:
+
+`front-left-connected-chain-001`
+
+Candidate SHA-256:
+
+`6e620ce4b1d810b259011d0d22d38ba7c7eea0e2500177df2bf28e08fe1caf6c`
+
+The successor proof rebuilds that candidate from the exact Geometry checkout. The Technical Art branch does not copy its positions or indices into a second source of truth.
+
+Because the Geometry candidate intentionally owns only positions/indices, `build_candidate_source_primitive()` supplies only the transport attributes required by the already-existing UC portable surface contract:
+
+- positions and indices remain Geometry-owned and byte-semantically unchanged before coordinate conversion;
+- vertex normals are derived as an explicit transport-only average of incident unit face normals, matching the neutral Animal form-study method;
+- the unchanged neutral Animal source material is attached explicitly;
+- those normals/materials are **not** claimed to be final authored shading data;
+- `adapt_geometry_candidate_for_uc()` then applies the same explicit Animal -> UC coordinate/winding/material conversion as the historical bridge.
+
+`require_candidate_identity()` fails closed if the rebuilt Geometry candidate drifts from the pinned candidate digest. The retained CI proof includes an intentional 1 mm position mutation and requires that mutation to be rejected.
+
+The current successor proof is pinned to Universal Creation commit:
+
+`9a4ab8156772536526dd75bb2acab81e9b88f517`
+
+No Animal topology rule, radius policy, rig weighting, animation semantics or source-material authority is moved into Universal Creation. UC only receives its existing portable surface contract.
+
+## Exact cross-repo proof
+
+`.github/workflows/uc-surface-bridge.yml` now keeps two evidence jobs separate:
+
+1. the historical disconnected form-study -> pinned historical UC proof;
+2. the connected Geometry candidate -> pinned current UC proof.
+
+The connected proof:
+
+1. checks out the exact Technical Art head, exact Geometry producer revision and exact current UC revision;
+2. rebuilds the connected candidate from Geometry-owned source landmarks/regions;
+3. requires the exact candidate digest before transport;
+4. adds transport-only normals plus the unchanged neutral Animal source material;
+5. converts through the explicit Animal -> UC coordinate/material contract;
+6. publishes through UC's real `publish_glb()` implementation;
+7. re-verifies the emitted GLB with UC's real `verify_glb()`;
+8. requires the candidate and verified GLB triangle counts to remain equal;
+9. retains the UC surface, GLB, receipt and all three exact checkout identities;
+10. fails closed on candidate-identity drift.
+
+This is a receiving-domain integration proof. It is not a copy of UC's GLB implementation or Geometry's topology generator inside Technical Art.
 
 ## Truth boundary
 
-A green bridge proves only that the exact animal form evidence can cross this explicit coordinate/material/schema boundary into the pinned UC generator and survive UC's bounded GLB verification.
+A green connected successor bridge proves only that the exact connected Animal Geometry candidate can be rebuilt from its pinned producer revision, converted through the explicit Animal -> UC portable-surface boundary, emitted by the pinned UC GLB generator and re-verified without changing triangle count.
 
-It does **not** prove visual quality, biological correctness, production topology, self-intersection freedom, rig/deformation quality, animation, target-engine import, collision, gameplay, performance, final materials, Art Director acceptance, or production readiness.
+It does **not** prove that the candidate is canonical, visually accepted or production topology. It does not establish final authored normals/tangents/UVs/materials, skeleton/skin/weight transport, deformation quality, animation transport, engine/runtime/controller import, collision/gameplay behavior, target-device performance, CANON or production readiness.
 
-The conversion rule should not be moved into UC merely because this one animal candidate passes. A second materially different design repository should first demonstrate that the same boundary actually recurs.
+The bridge remains in `axm-animal-design`. This activation provides no evidence that the Animal-specific boundary should be moved into Universal Creation or Profession Fabric.
