@@ -1,0 +1,73 @@
+name: Geometry source-successor topology rebind evidence
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  geometry-source-successor-topology-rebind:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ['3.11', '3.13']
+    steps:
+      - name: Checkout exact Geometry head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          path: animal
+          fetch-depth: 0
+      - name: Prove exact Organic source-successor ancestry
+        working-directory: animal
+        run: git merge-base --is-ancestor 7314a8971abb53f8ee6ef226c2496ab6d5da20d7 HEAD
+      - name: Checkout exact UC topology observer donor
+        uses: actions/checkout@v4
+        with:
+          repository: mike-axiom-mir/axm-universal-creation
+          ref: b434a349cf159b392148b4dc9d68146573531a60
+          path: uc
+      - name: Checkout exact Rigging donor required by inherited Animal tests
+        uses: actions/checkout@v4
+        with:
+          repository: mike-axiom-mir/axm-animal-design
+          ref: 04760112deb81a8d145226fe7ee02923107c9916
+          path: rig-donor
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Compile
+        working-directory: animal
+        run: python -m compileall -q src tests tools
+      - name: Run full inherited Animal test suite
+        working-directory: animal
+        env:
+          AXM_RIG_PLAN: ../rig-donor/examples/quadruped_rig_probe_001.json
+        run: python -m unittest discover -s tests -v
+      - name: Build exact Geometry source-successor topology evidence
+        if: matrix.python-version == '3.11'
+        working-directory: animal
+        env:
+          PYTHONPATH: src:../uc/src
+        run: |
+          mkdir -p evidence/geometry-source-successor-topology-rebind-001
+          python tools/build_source_successor_topology_rebind_evidence.py \
+            --source examples/quadruped_neutral_001.json \
+            --profile examples/quadruped_elbow_source_successor_003.json \
+            --out evidence/geometry-source-successor-topology-rebind-001
+
+          test -s evidence/geometry-source-successor-topology-rebind-001/source-successor-topology-candidate.json
+          test -s evidence/geometry-source-successor-topology-rebind-001/source-successor-topology-rebind-receipt.json
+          grep -q 'PASS_SOURCE_SUCCESSOR_EXACT_TOPOLOGY_REBIND' \
+            evidence/geometry-source-successor-topology-rebind-001/source-successor-topology-rebind-receipt.json
+          git rev-parse HEAD > evidence/geometry-source-successor-topology-rebind-001/exact-head.txt
+          printf '%s\n' '7314a8971abb53f8ee6ef226c2496ab6d5da20d7' > evidence/geometry-source-successor-topology-rebind-001/organic-source-head.txt
+          printf '%s\n' 'b434a349cf159b392148b4dc9d68146573531a60' > evidence/geometry-source-successor-topology-rebind-001/uc-donor-head.txt
+          printf '%s\n' '04760112deb81a8d145226fe7ee02923107c9916' > evidence/geometry-source-successor-topology-rebind-001/rig-donor-head.txt
+      - name: Upload exact Geometry evidence
+        if: ${{ always() && matrix.python-version == '3.11' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: animal-geometry-source-successor-topology-rebind-001-evidence
+          path: animal/evidence/geometry-source-successor-topology-rebind-001
+          if-no-files-found: error
+          retention-days: 30
