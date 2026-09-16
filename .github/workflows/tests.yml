@@ -68,3 +68,16 @@ jobs:
             evidence/quadruped_articulation_loop_001.temporal_summary.json
             evidence/quadruped_articulation_loop_001.temporal_review.svg
           if-no-files-found: error
+      - name: Build exact animation sampled-playback evidence
+        if: matrix.python-version == '3.11'
+        run: python tools/build_animation_playback.py
+      - name: Upload animation sampled-playback evidence
+        if: matrix.python-version == '3.11'
+        uses: actions/upload-artifact@v4
+        with:
+          name: quadruped-articulation-loop-001-playback-evidence
+          path: |
+            evidence/quadruped_articulation_loop_001.playback.json
+            evidence/quadruped_articulation_loop_001.playback_summary.json
+            evidence/quadruped_articulation_loop_001.playback.svg
+          if-no-files-found: error
