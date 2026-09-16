@@ -1,14 +1,17 @@
 import copy
 import json
+import sys
 import unittest
 from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "src"))
 
 from axm_animal_design.connected_deformation import (
     CANDIDATE_DIGEST,
     inspect_connected_forelimb_deformation,
 )
 
-ROOT = Path(__file__).resolve().parents[1]
 SOURCE = json.loads((ROOT / "examples" / "quadruped_neutral_001.json").read_text(encoding="utf-8"))
 
 
