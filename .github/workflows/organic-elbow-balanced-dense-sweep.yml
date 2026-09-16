@@ -1,0 +1,66 @@
+name: Organic balanced elbow dense sweep evidence
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  organic-balanced-elbow-dense-sweep:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ['3.11', '3.13']
+    steps:
+      - name: Checkout exact Organic review head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          path: animal
+      - name: Checkout exact Rigging plan/profile donor
+        uses: actions/checkout@v4
+        with:
+          repository: mike-axiom-mir/axm-animal-design
+          ref: 04760112deb81a8d145226fe7ee02923107c9916
+          path: rig-donor
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Compile
+        working-directory: animal
+        run: python -m compileall -q src tests tools
+      - name: Run full animal-design unit suite with exact donor
+        working-directory: animal
+        env:
+          AXM_RIG_PLAN: ../rig-donor/examples/quadruped_rig_probe_001.json
+        run: python -m unittest discover -s tests -v
+      - name: Build exact dense sampled Organic evidence
+        if: matrix.python-version == '3.11'
+        working-directory: animal
+        env:
+          PYTHONPATH: src
+        run: |
+          mkdir -p evidence/organic-elbow-balanced-dense-sweep-003
+          python tools/build_organic_elbow_balanced_dense_sweep_evidence.py \
+            --source examples/quadruped_neutral_001.json \
+            --rig-plan ../rig-donor/examples/quadruped_rig_probe_001.json \
+            --weighting-profile ../rig-donor/examples/quadruped_weighting_refinement_001.json \
+            --rig-donor-head 04760112deb81a8d145226fe7ee02923107c9916 \
+            --out evidence/organic-elbow-balanced-dense-sweep-003
+
+          test -s evidence/organic-elbow-balanced-dense-sweep-003/balanced-elbow-dense-sweep-receipt.json
+          test -s evidence/organic-elbow-balanced-dense-sweep-003/balanced-elbow-dense-sweep-margins.svg
+          test -s evidence/organic-elbow-balanced-dense-sweep-003/pose-schedule.json
+          grep -q 'axm.animal-organic-elbow-balanced-dense-sweep/v0.1' \
+            evidence/organic-elbow-balanced-dense-sweep-003/balanced-elbow-dense-sweep-receipt.json
+          grep -q 'HOLD_VISUAL_AND_SOURCE_ADOPTION' \
+            evidence/organic-elbow-balanced-dense-sweep-003/balanced-elbow-dense-sweep-receipt.json
+          git rev-parse HEAD > evidence/organic-elbow-balanced-dense-sweep-003/exact-head.txt
+          printf '%s\n' '04760112deb81a8d145226fe7ee02923107c9916' > evidence/organic-elbow-balanced-dense-sweep-003/rig-donor-head.txt
+      - name: Upload exact dense sampled Organic evidence
+        if: ${{ always() && matrix.python-version == '3.11' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: animal-organic-elbow-balanced-dense-sweep-003-evidence
+          path: animal/evidence/organic-elbow-balanced-dense-sweep-003
+          if-no-files-found: error
+          retention-days: 30
