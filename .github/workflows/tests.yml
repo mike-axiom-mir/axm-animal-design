@@ -42,3 +42,16 @@ jobs:
             evidence/quadruped_rig_probe_001.evidence.json
             evidence/quadruped_rig_probe_001.summary.json
           if-no-files-found: error
+      - name: Build exact animation-motion evidence
+        if: matrix.python-version == '3.11'
+        run: python tools/build_animation_motion.py
+      - name: Upload animation-motion evidence
+        if: matrix.python-version == '3.11'
+        uses: actions/upload-artifact@v4
+        with:
+          name: quadruped-articulation-loop-001-evidence
+          path: |
+            evidence/quadruped_articulation_loop_001.evidence.json
+            evidence/quadruped_articulation_loop_001.summary.json
+            evidence/quadruped_articulation_loop_001_frames/
+          if-no-files-found: error
