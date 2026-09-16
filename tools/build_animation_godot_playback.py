@@ -1,6 +1,7 @@
 from pathlib import Path
 import hashlib
 import json
+import subprocess
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -20,6 +21,12 @@ SUMMARY_PATH = OUT_DIR / "quadruped_animation_payload_summary.json"
 
 def _sha256_bytes(data):
     return hashlib.sha256(data).hexdigest()
+
+
+def _git_head():
+    return subprocess.check_output(
+        ["git", "rev-parse", "HEAD"], cwd=ROOT, text=True
+    ).strip()
 
 
 def _godot_point(point):
@@ -92,9 +99,14 @@ def main():
     if unique_surface_digests <= 2:
         raise ValueError("authored playback did not retain materially distinct posed surfaces")
 
+    receiving_repository = {
+        "repository": "mike-axiom-mir/axm-animal-design",
+        "git_head": _git_head(),
+    }
     payload = {
         "schema": "axm.animal-animation-godot-discrete-playback-payload/v0.1",
         "proof_scope": "PINNED_GODOT_AUTHORED_SAMPLE_APPLICATION_NOT_REALTIME_CONTROLLER",
+        "receiving_repository": receiving_repository,
         "source_identity": {
             "source_name": playback["source_name"],
             "source_digest": playback["source_digest"],
@@ -153,6 +165,7 @@ def main():
     summary = {
         "schema": "axm.animal-animation-godot-discrete-playback-build-summary/v0.1",
         "payload_sha256": _sha256_bytes(payload_bytes),
+        "receiving_repository": receiving_repository,
         "source_identity": payload["source_identity"],
         "source_playback": payload["source_playback"],
         "topology": payload["topology"],
