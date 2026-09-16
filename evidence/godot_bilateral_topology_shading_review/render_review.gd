@@ -54,8 +54,12 @@ func _ready() -> void:
             _place_camera(context)
             for variant_name in ["historical_right", "exact_mirror_right"]:
                 _set_mesh(payload["variants"][variant_name], normal_mode)
+                # Two full engine frames are enough to commit camera/mesh/material state
+                # before reading the viewport in headless GL Compatibility. Avoid
+                # frame_post_draw here: that signal can stall indefinitely under the
+                # GitHub-hosted headless target even though rendering is otherwise live.
                 await get_tree().process_frame
-                await RenderingServer.frame_post_draw
+                await get_tree().process_frame
                 var filename := "%s-%s-%s.png" % [normal_mode, context, variant_name]
                 var path := out_dir.path_join(filename)
                 var image := get_viewport().get_texture().get_image()
