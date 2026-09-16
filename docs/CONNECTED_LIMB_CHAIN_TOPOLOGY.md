@@ -14,7 +14,25 @@ The Geometry / Topology lane therefore adds a **derived candidate only**. It doe
 
 `shoulder_L -> elbow_L -> wrist_L -> front_paw_L`
 
-with radii `[0.115, 0.09, 0.07, 0.095]` metres and 10 ring segments.
+with 10 ring segments.
+
+### Source-owned radius reconciliation
+
+The candidate no longer hand-types its shared-ring radius list. `derive_shared_ring_radii()` resolves the ordered source segment chain directly from the Organic Form regions and applies one explicit local policy:
+
+- preserve the first source `radius_a` exactly;
+- preserve the last source `radius_b` exactly;
+- when two source spans meet at one landmark, use the arithmetic mean of the incoming `radius_b` and outgoing `radius_a` for the one connected shared ring;
+- retain both authored values and their gap in the evidence packet.
+
+For this exact source that derives:
+
+- shoulder: `0.115 m` from `front_upper_L.radius_a`;
+- elbow: `(0.09 + 0.09) / 2 = 0.09 m`;
+- wrist: `(0.065 + 0.075) / 2 = 0.07 m`;
+- paw endpoint: `0.095 m` from `front_paw_L.radius_b`.
+
+The `0.07 m` wrist ring is therefore an explicit reconciliation of a real `0.01 m` authored endpoint-radius mismatch, not a silent replacement value. The policy is candidate-local and is **not** claimed to be anatomical truth or a studio-wide retopology rule.
 
 The pattern is deliberately small. It does not prescribe animal anatomy, a skeleton, skin weights, production retopology, or a studio-wide organic mesh style.
 
@@ -38,7 +56,8 @@ The evidence builder compares only the three existing left-front-limb primitives
 - candidate reports zero boundary edges;
 - candidate reports zero non-manifold edges;
 - candidate reports zero shared-edge orientation conflicts;
-- candidate reports zero collapsed triangles at the declared weld tolerance.
+- candidate reports zero collapsed triangles at the declared weld tolerance;
+- candidate radii are reproduced from the exact source-region chain rather than a detached hand-authored numeric list.
 
 CI is authoritative for the exact observed numbers. This document does not predeclare PASS.
 
@@ -47,6 +66,7 @@ CI is authoritative for the exact observed numbers. This document does not prede
 Even a green topology receipt would **not** establish:
 
 - better silhouette or anatomical form;
+- that the arithmetic-mean junction policy is the visually or anatomically best radius transition;
 - deformation quality, volume preservation, or self-intersection freedom;
 - rigging or animation acceptance;
 - UV, material, normal/tangent, or shading quality;
