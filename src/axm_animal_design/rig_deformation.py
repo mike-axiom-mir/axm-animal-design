@@ -15,7 +15,8 @@ from typing import Any
 from .organic_form import build_form_study
 
 PLAN_SCHEMA = "axm.animal-rig-deformation-plan/v0.1"
-EVIDENCE_SCHEMA = "axm.animal-rig-deformation-evidence/v0.1"
+EVIDENCE_SCHEMA = "axm.animal-rig-deformation-evidence/v0.2"
+CHAIN_GAP_TOLERANCE = 1e-9
 
 
 def _canonical(value: Any) -> bytes:
@@ -101,6 +102,22 @@ def _edge_metrics(before, after, indices):
     return min(ratios), max(ratios)
 
 
+def _minimum_vertex_gap(first, second):
+    return min(math.dist(a, b) for a in first for b in second)
+
+
+def _collapsed_triangles(positions, indices):
+    collapsed = 0
+    minimum_area = math.inf
+    for offset in range(0, len(indices), 3):
+        a, b, c = (positions[indices[offset]], positions[indices[offset + 1]], positions[indices[offset + 2]])
+        area = _triangle_double_area(a, b, c)
+        minimum_area = min(minimum_area, area)
+        if area <= 1e-12:
+            collapsed += 1
+    return collapsed, minimum_area
+
+
 def _validate_plan(spec, plan, primitives):
     if not isinstance(plan, dict) or plan.get("schema") != PLAN_SCHEMA:
         raise ValueError(f"plan must use {PLAN_SCHEMA}")
@@ -127,6 +144,20 @@ def _validate_plan(spec, plan, primitives):
         child_region = joint.get("child_region")
         if parent_region not in primitives or child_region not in primitives:
             raise ValueError(f"{identifier} references unknown mesh regions")
+        downstream_regions = joint.get("downstream_regions", [])
+        if not isinstance(downstream_regions, list) or len(downstream_regions) > 8:
+            raise ValueError(f"{identifier}.downstream_regions must be a list with at most 8 entries")
+        region_seen = {parent_region, child_region}
+        checked_downstream = []
+        for region_id in downstream_regions:
+            if not isinstance(region_id, str) or not region_id:
+                raise ValueError(f"{identifier}.downstream_regions entries must be non-empty text")
+            if region_id not in primitives:
+                raise ValueError(f"{identifier} references unknown downstream mesh region")
+            if region_id in region_seen:
+                raise ValueError(f"{identifier}.downstream_regions must be unique and exclude parent/child regions")
+            region_seen.add(region_id)
+            checked_downstream.append(region_id)
         axis = _vec3(joint.get("axis"), f"{identifier}.axis")
         _unit(axis, f"{identifier}.axis")
         influence = joint.get("influence_radius")
@@ -148,7 +179,13 @@ def _validate_plan(spec, plan, primitives):
             if abs(float(angle)) > 120.0:
                 raise ValueError(f"{identifier} pose angle exceeds bounded probe range")
             parsed_angles.append(float(angle))
-        checked.append({**joint, "axis": axis, "influence_radius": float(influence), "pose_angles_deg": parsed_angles})
+        checked.append({
+            **joint,
+            "axis": axis,
+            "influence_radius": float(influence),
+            "pose_angles_deg": parsed_angles,
+            "downstream_regions": checked_downstream,
+        })
     return checked
 
 
@@ -193,6 +230,27 @@ def inspect_rig_deformation(spec: dict[str, Any], plan: dict[str, Any]) -> dict[
         if min(source_areas) <= 1e-12:
             raise ValueError(f"{joint['id']} source child region contains degenerate triangles")
 
+        downstream_source = {}
+        for region_id in joint["downstream_regions"]:
+            row = primitives[region_id]
+            region_positions = [tuple(point) for point in row["positions"]]
+            region_indices = list(row["indices"])
+            collapsed, minimum_area = _collapsed_triangles(region_positions, region_indices)
+            if collapsed or minimum_area <= 1e-12:
+                raise ValueError(f"{joint['id']} downstream region {region_id} contains degenerate triangles")
+            downstream_source[region_id] = {
+                "positions": region_positions,
+                "indices": region_indices,
+            }
+
+        chain_ids = [joint["child_region"], *joint["downstream_regions"]]
+        source_positions = {joint["child_region"]: before, **{key: value["positions"] for key, value in downstream_source.items()}}
+        source_chain_gaps = {}
+        for parent_id, descendant_id in zip(chain_ids, chain_ids[1:]):
+            source_chain_gaps[f"{parent_id}->{descendant_id}"] = _minimum_vertex_gap(
+                source_positions[parent_id], source_positions[descendant_id]
+            )
+
         for angle in joint["pose_angles_deg"]:
             after = []
             fixed_drift = 0.0
@@ -218,9 +276,76 @@ def inspect_rig_deformation(spec: dict[str, Any], plan: dict[str, Any]) -> dict[
                     collapsed += 1
             area_ratios = [posed / source for posed, source in zip(posed_areas, source_areas)]
             min_edge_ratio, max_edge_ratio = _edge_metrics(before, after, indices)
+
+            posed_positions = {joint["child_region"]: after}
+            downstream_reports = []
+            downstream_ok = True
+            for region_id in joint["downstream_regions"]:
+                source_region = downstream_source[region_id]
+                region_before = source_region["positions"]
+                region_after = [
+                    _rotate_about_axis(point, joint_position, joint["axis"], angle)
+                    for point in region_before
+                ]
+                posed_positions[region_id] = region_after
+                region_finite = all(math.isfinite(value) for point in region_after for value in point)
+                region_collapsed, _ = _collapsed_triangles(region_after, source_region["indices"])
+                region_min_edge_ratio, region_max_edge_ratio = _edge_metrics(
+                    region_before, region_after, source_region["indices"]
+                )
+                region_radius_drift = max(
+                    abs(math.dist(point, joint_position) - math.dist(posed, joint_position))
+                    for point, posed in zip(region_before, region_after)
+                )
+                region_status = (
+                    "PASS"
+                    if region_finite
+                    and region_collapsed == 0
+                    and region_radius_drift <= 1e-9
+                    else "FAIL"
+                )
+                downstream_ok &= region_status == "PASS"
+                downstream_reports.append({
+                    "region": region_id,
+                    "transform": "rigid descendant rotation inherited from sampled joint",
+                    "collapsed_triangles": region_collapsed,
+                    "minimum_edge_length_ratio": round(region_min_edge_ratio, 9),
+                    "maximum_edge_length_ratio": round(region_max_edge_ratio, 9),
+                    "rigid_radius_max_drift": round(region_radius_drift, 12),
+                    "status": region_status,
+                })
+
+            continuity_reports = []
+            continuity_ok = True
+            for parent_id, descendant_id in zip(chain_ids, chain_ids[1:]):
+                key = f"{parent_id}->{descendant_id}"
+                source_gap = source_chain_gaps[key]
+                posed_gap = _minimum_vertex_gap(posed_positions[parent_id], posed_positions[descendant_id])
+                gap_drift = abs(posed_gap - source_gap)
+                continuity_status = "PASS" if gap_drift <= CHAIN_GAP_TOLERANCE else "FAIL"
+                continuity_ok &= continuity_status == "PASS"
+                continuity_reports.append({
+                    "from_region": parent_id,
+                    "to_region": descendant_id,
+                    "source_minimum_vertex_gap": round(source_gap, 12),
+                    "posed_minimum_vertex_gap": round(posed_gap, 12),
+                    "absolute_gap_drift": round(gap_drift, 12),
+                    "tolerance": CHAIN_GAP_TOLERANCE,
+                    "status": continuity_status,
+                })
+
             distal = _rotate_about_axis(child_marker, joint_position, joint["axis"], angle)
             finite = all(math.isfinite(value) for point in after for value in point)
-            status = "PASS" if finite and collapsed == 0 and fixed_drift <= 1e-9 and rigid_radius_drift <= 1e-9 else "FAIL"
+            status = (
+                "PASS"
+                if finite
+                and collapsed == 0
+                and fixed_drift <= 1e-9
+                and rigid_radius_drift <= 1e-9
+                and downstream_ok
+                and continuity_ok
+                else "FAIL"
+            )
             all_pass &= status == "PASS"
             poses.append({
                 "angle_deg": angle,
@@ -232,6 +357,8 @@ def inspect_rig_deformation(spec: dict[str, Any], plan: dict[str, Any]) -> dict[
                 "fixed_weight_vertex_max_drift": round(fixed_drift, 12),
                 "rigid_weight_radius_max_drift": round(rigid_radius_drift, 12),
                 "distal_marker_position": [round(value, 9) for value in distal],
+                "downstream_regions": downstream_reports,
+                "chain_continuity": continuity_reports,
             })
         joint_status = "PASS" if all(row["status"] == "PASS" for row in poses) and max_weight_sum_error <= 1e-12 else "FAIL"
         all_pass &= joint_status == "PASS"
@@ -240,9 +367,11 @@ def inspect_rig_deformation(spec: dict[str, Any], plan: dict[str, Any]) -> dict[
             "landmark": joint["landmark"],
             "parent_region": joint["parent_region"],
             "child_region": joint["child_region"],
+            "downstream_regions": list(joint["downstream_regions"]),
+            "articulated_region_chain": chain_ids,
             "axis": list(joint["axis"]),
             "influence_radius": joint["influence_radius"],
-            "weighting": "parent-identity + child-rotation smoothstep linear blend",
+            "weighting": "parent-identity + child-rotation smoothstep linear blend; declared downstream descendants inherit full child rotation",
             "weight_counts": {"fixed": fixed_vertices, "blended": blended_vertices, "rigid": rigid_vertices},
             "max_weight_sum_error": round(max_weight_sum_error, 12),
             "poses": poses,
@@ -257,10 +386,11 @@ def inspect_rig_deformation(spec: dict[str, Any], plan: dict[str, Any]) -> dict[
         "plan_digest": _digest(plan),
         "joint_count": len(joint_reports),
         "pose_count": sum(len(row["poses"]) for row in joint_reports),
+        "declared_downstream_region_count": sum(len(row["downstream_regions"]) for row in joint_reports),
         "joints": joint_reports,
         "gate": "PASS" if all_pass else "FAIL",
         "truth": {
-            "proves": "Exact declared joint probes preserve normalized two-transform weights, fixed anchors, rigid-radius invariants, finite coordinates and non-collapsed source-linked triangles across the sampled authored pose angles.",
+            "proves": "Exact declared joint probes preserve normalized two-transform child-region weights, fixed anchors, rigid-radius invariants, finite coordinates, non-collapsed source-linked triangles, explicitly declared rigid downstream-region propagation, and source-relative minimum vertex gaps across the sampled authored pose angles.",
             "does_not_prove": "Biological correctness, production skin weighting, self-intersection freedom, volume preservation, perceptual deformation quality, animation quality, locomotion, target-engine playback, collision, gameplay, performance, or mastery.",
         },
     }
