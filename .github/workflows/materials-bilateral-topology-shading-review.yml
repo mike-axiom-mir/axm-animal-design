@@ -1,0 +1,124 @@
+name: Materials bilateral topology shading review
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  materials-bilateral-topology-shading-review:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ['3.11', '3.13']
+    steps:
+      - name: Checkout exact Materials head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          path: animal
+          fetch-depth: 0
+
+      - name: Prove exact Geometry donor ancestry and module identity
+        working-directory: animal
+        run: |
+          git merge-base --is-ancestor bdbb51303bd1b96866b06a71730ccc328bf4f2f6 HEAD
+          test "$(git hash-object src/axm_animal_design/bilateral_mirror_surface_topology.py)" = "9a0ebcc6169445996756bb446a87e3baf8b9cc33"
+
+      - name: Checkout exact Rigging plan donor
+        uses: actions/checkout@v4
+        with:
+          repository: mike-axiom-mir/axm-animal-design
+          ref: 04760112deb81a8d145226fe7ee02923107c9916
+          path: rig-donor
+
+      - name: Verify exact Rigging donor checkout
+        run: test "$(git -C rig-donor rev-parse HEAD)" = "04760112deb81a8d145226fe7ee02923107c9916"
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Compile
+        working-directory: animal
+        run: python -m compileall -q src tests tools
+
+      - name: Run full inherited Animal test suite
+        working-directory: animal
+        env:
+          AXM_RIG_PLAN: ../rig-donor/examples/quadruped_rig_probe_001.json
+        run: python -m unittest discover -s tests -v
+
+      - name: Install image verifier dependency
+        if: matrix.python-version == '3.11'
+        run: python -m pip install --disable-pip-version-check pillow
+
+      - name: Setup Godot target host
+        if: matrix.python-version == '3.11'
+        uses: chickensoft-games/setup-godot@v2
+        with:
+          version: 4.7.2
+          use-dotnet: false
+          include-templates: false
+
+      - name: Build source-pinned Materials review payload
+        if: matrix.python-version == '3.11'
+        working-directory: animal
+        env:
+          PYTHONPATH: src
+        run: |
+          mkdir -p evidence/materials-bilateral-topology-shading-review-001/renders
+          python tools/build_bilateral_topology_shading_review_payload.py \
+            --source examples/quadruped_neutral_001.json \
+            --left-profile examples/quadruped_elbow_source_successor_003.json \
+            --bilateral-profile examples/quadruped_elbow_bilateral_successor_003.json \
+            --rig-plan ../rig-donor/examples/quadruped_rig_probe_001.json \
+            --geometry-head bdbb51303bd1b96866b06a71730ccc328bf4f2f6 \
+            --geometry-module-blob 9a0ebcc6169445996756bb446a87e3baf8b9cc33 \
+            --out evidence/materials-bilateral-topology-shading-review-001/review-payload.json
+
+      - name: Validate Godot review project
+        if: matrix.python-version == '3.11'
+        working-directory: animal
+        run: godot --headless --path evidence/godot_bilateral_topology_shading_review --editor --quit
+
+      - name: Capture exact target-host shading review
+        if: matrix.python-version == '3.11'
+        working-directory: animal
+        run: |
+          godot --headless --path evidence/godot_bilateral_topology_shading_review -- \
+            --payload "$(pwd)/evidence/materials-bilateral-topology-shading-review-001/review-payload.json" \
+            --out-dir "$(pwd)/evidence/materials-bilateral-topology-shading-review-001/renders" \
+            --geometry-head bdbb51303bd1b96866b06a71730ccc328bf4f2f6 \
+            --geometry-module-blob 9a0ebcc6169445996756bb446a87e3baf8b9cc33
+
+      - name: Verify and summarize target-host evidence
+        if: matrix.python-version == '3.11'
+        working-directory: animal
+        run: |
+          python tools/verify_bilateral_topology_shading_review.py \
+            --payload evidence/materials-bilateral-topology-shading-review-001/review-payload.json \
+            --telemetry evidence/materials-bilateral-topology-shading-review-001/target-host-telemetry.json \
+            --renders evidence/materials-bilateral-topology-shading-review-001/renders \
+            --materials-head "$(git rev-parse HEAD)" \
+            --out evidence/materials-bilateral-topology-shading-review-001/material-lookdev-evidence.json
+          grep -q 'PASS_TARGET_HOST_BILATERAL_TOPOLOGY_SHADING_REVIEW_CAPTURED' \
+            evidence/materials-bilateral-topology-shading-review-001/material-lookdev-evidence.json
+          git rev-parse HEAD > evidence/materials-bilateral-topology-shading-review-001/exact-materials-head.txt
+          printf '%s\n' 'bdbb51303bd1b96866b06a71730ccc328bf4f2f6' > evidence/materials-bilateral-topology-shading-review-001/exact-geometry-donor-head.txt
+          printf '%s\n' '9a0ebcc6169445996756bb446a87e3baf8b9cc33' > evidence/materials-bilateral-topology-shading-review-001/exact-geometry-module-blob.txt
+          cat > evidence/materials-bilateral-topology-shading-review-001/README.txt <<'EOF'
+          Materials / LookDev target-host evidence only.
+          Single changed variable: historical versus exact-mirror right triangle connectivity.
+          Source positions, triangle budget, neutral probe material, lighting and camera are held within each comparison.
+          Normal generation is tested separately as face-split and vertex-smooth.
+          No production Animal material, authored normals/tangents, deformation acceptance, runtime acceptance, final aesthetic acceptance, CANON or production readiness is claimed.
+          EOF
+
+      - name: Upload exact Materials shading review evidence
+        if: ${{ always() && matrix.python-version == '3.11' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: animal-materials-bilateral-topology-shading-review-${{ github.event.pull_request.head.sha || github.sha }}
+          path: animal/evidence/materials-bilateral-topology-shading-review-001
+          if-no-files-found: error
+          retention-days: 30
