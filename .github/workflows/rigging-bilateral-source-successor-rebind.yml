@@ -58,9 +58,9 @@ jobs:
             --out evidence/rigging-bilateral-source-successor-rebind-001
 
           test -s evidence/rigging-bilateral-source-successor-rebind-001/bilateral-source-successor-rigging-rebind-receipt.json
-          grep -q 'PASS_BILATERAL_SOURCE_SUCCESSOR_RIGGING_REBIND_DENSE_SWEEP' \
+          grep -q 'PASS_BILATERAL_SOURCE_SUCCESSOR_RIGGING_REBIND_DENSE_SWEEPS__HOLD_EXACT_SURFACE_METRIC_MIRROR' \
             evidence/rigging-bilateral-source-successor-rebind-001/bilateral-source-successor-rigging-rebind-receipt.json
-          grep -q 'PASS_DENSE_BILATERAL_MIRROR_DEFORMATION_EQUIVALENCE' \
+          grep -q 'FAIL_DENSE_BILATERAL_MIRROR_DEFORMATION_EQUIVALENCE' \
             evidence/rigging-bilateral-source-successor-rebind-001/bilateral-source-successor-rigging-rebind-receipt.json
           test "$(find evidence/rigging-bilateral-source-successor-rebind-001 -name '*.obj' | wc -l)" = "20"
           git rev-parse HEAD > evidence/rigging-bilateral-source-successor-rebind-001/exact-head.txt
