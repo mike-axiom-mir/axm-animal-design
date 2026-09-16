@@ -7,6 +7,7 @@ on:
 jobs:
   materials-bilateral-topology-shading-review:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     strategy:
       matrix:
         python-version: ['3.11', '3.13']
@@ -60,6 +61,14 @@ jobs:
           use-dotnet: false
           include-templates: false
 
+      - name: Install virtual display when needed
+        if: matrix.python-version == '3.11'
+        run: |
+          if ! command -v xvfb-run >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y xvfb
+          fi
+
       - name: Build source-pinned Materials review payload
         if: matrix.python-version == '3.11'
         working-directory: animal
@@ -85,7 +94,12 @@ jobs:
         if: matrix.python-version == '3.11'
         working-directory: animal
         run: |
-          godot --headless --path evidence/godot_bilateral_topology_shading_review -- \
+          set -euo pipefail
+          timeout 120s xvfb-run --auto-servernum --server-args="-screen 0 960x720x24" \
+            godot \
+            --display-driver x11 \
+            --rendering-method gl_compatibility \
+            --path evidence/godot_bilateral_topology_shading_review -- \
             --payload "$(pwd)/evidence/materials-bilateral-topology-shading-review-001/review-payload.json" \
             --out-dir "$(pwd)/evidence/materials-bilateral-topology-shading-review-001/renders" \
             --geometry-head bdbb51303bd1b96866b06a71730ccc328bf4f2f6 \
