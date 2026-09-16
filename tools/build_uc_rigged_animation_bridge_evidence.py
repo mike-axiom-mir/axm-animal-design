@@ -21,7 +21,6 @@ from typing import Any
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from axm_animal_design.connected_deformation import digest
 from axm_animal_design.organic_form import build_form_study
 from axm_animal_design.uc_rigged_animation_bridge import (
     BRIDGE_SCHEMA,
@@ -46,6 +45,11 @@ CLIP_SHA256 = "407903cbc5fe8803fc6a749e128b7736ebf139b414e61f77d9bbd32fc46f427b"
 OUTPUT_SCHEMA = "axm.animal-current-uc-rigged-animation-transport-evidence/v0.1"
 OUTPUT_STATUS = "PASS_ANIMAL_EXACT_MIRROR_RIGHT_FORELIMB_SKINNED_41_KEY_GLB_TO_CURRENT_UC_CODEC"
 POSE_TOLERANCE_M = 1e-6
+
+
+def canonical_digest(value: Any) -> str:
+    payload = json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
+    return hashlib.sha256(payload).hexdigest()
 
 
 def git_head(path: Path) -> str:
@@ -165,7 +169,7 @@ def main() -> int:
 
     spec = load_json(rigging_root / "examples" / "quadruped_neutral_001.json")
     plan = load_json(rig_donor_root / "examples" / "quadruped_rig_probe_001.json")
-    if digest(plan) != RIG_PLAN_SHA256:
+    if canonical_digest(plan) != RIG_PLAN_SHA256:
         raise ValueError("exact donor rig plan digest drift")
     material = source_material(spec)
 
@@ -209,7 +213,6 @@ def main() -> int:
     if deformation.get("pass") is not True or deformation.get("changed") is not True:
         raise ValueError("current UC rigged codec CPU deformation observer did not pass")
 
-    # Fail-closed controls: source-rest drift and receiver-side weight drift.
     drifted_frames = copy.deepcopy(frames)
     drifted_frames[0]["positions"][0][0] = float(drifted_frames[0]["positions"][0][0]) + 0.001
     try:
