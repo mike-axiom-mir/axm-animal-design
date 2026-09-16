@@ -12,7 +12,7 @@ import os
 from pathlib import Path
 
 from axm_animal_design.organic_form import build_form_study
-from axm_animal_design.topology_study import build_connected_chain
+from axm_animal_design.topology_study import build_connected_chain, derive_shared_ring_radii
 from axm_uc.mesh_topology import inspect_mesh_topology
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -50,11 +50,16 @@ def main() -> None:
     original_positions, original_indices = flatten(original)
     before = inspect_mesh_topology(original_positions, original_indices, weld_tolerance=1e-6)
 
+    radius_derivation = derive_shared_ring_radii(spec["regions"], ids)
+    expected_landmarks = ["shoulder_L", "elbow_L", "wrist_L", "front_paw_L"]
+    if radius_derivation["path_landmarks"] != expected_landmarks:
+        raise SystemExit("source region chain no longer resolves the expected authored landmark path")
+
     lm = spec["landmarks"]
     candidate = build_connected_chain(
         "front-left-connected-chain-001",
-        [lm[name] for name in ("shoulder_L", "elbow_L", "wrist_L", "front_paw_L")],
-        [0.115, 0.09, 0.07, 0.095],
+        [lm[name] for name in radius_derivation["path_landmarks"]],
+        radius_derivation["radii_m"],
         segments=10,
     )
     after = inspect_mesh_topology(candidate["positions"], candidate["indices"], weld_tolerance=1e-6)
@@ -66,11 +71,14 @@ def main() -> None:
         "candidate-no-nonmanifold-edges": "PASS" if after["nonmanifold_edge_count"] == 0 else "FAIL",
         "candidate-shared-edge-orientation": "PASS" if after["orientation_conflict_edge_count"] == 0 else "FAIL",
         "candidate-no-collapse": "PASS" if after["collapsed_triangle_count"] == 0 else "FAIL",
+        "candidate-radii-derived-from-source-regions": (
+            "PASS" if candidate["radii"] == radius_derivation["radii_m"] else "FAIL"
+        ),
     }
     status = "PASS" if all(value == "PASS" for value in gates.values()) else "FAIL"
 
     receipt = {
-        "schema": "axm.animal-connected-chain-topology-evidence/v0.1",
+        "schema": "axm.animal-connected-chain-topology-evidence/v0.2",
         "status": status,
         "source_name": spec["name"],
         "source_digest": baseline["source_digest"],
@@ -86,9 +94,10 @@ def main() -> None:
         "scope": {
             "baseline_regions": list(ids),
             "candidate": candidate["id"],
-            "landmarks": ["shoulder_L", "elbow_L", "wrist_L", "front_paw_L"],
+            "landmarks": radius_derivation["path_landmarks"],
             "radii_m": candidate["radii"],
             "segments": candidate["segments"],
+            "radius_derivation": radius_derivation,
         },
         "before": {
             "vertices": len(original_positions),
@@ -114,6 +123,7 @@ def main() -> None:
             "candidate_is_self_intersection_proof": False,
             "candidate_is_game_ready": False,
             "uc_donor_pass_transferred_without_retest": False,
+            "junction_radius_policy_is_source-authored": False,
         },
     }
 
@@ -132,6 +142,8 @@ def main() -> None:
         "after_vertices": len(candidate["positions"]),
         "before_triangles": len(original_indices) // 3,
         "after_triangles": len(candidate["indices"]) // 3,
+        "radius_policy": radius_derivation["policy"],
+        "wrist_radius_gap_m": radius_derivation["junctions"][1]["authored_radius_gap_m"],
         "candidate_digest": receipt["after"]["candidate_digest"],
     }, sort_keys=True))
 
