@@ -11,9 +11,10 @@ jobs:
       matrix:
         python-version: ['3.11', '3.13']
     steps:
-      - name: Checkout connected Geometry candidate + Rigging probe
+      - name: Checkout exact connected Geometry candidate + Rigging probe head
         uses: actions/checkout@v4
         with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           path: animal
       - name: Checkout exact existing Rigging donor
         uses: actions/checkout@v4
