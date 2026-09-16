@@ -33,7 +33,7 @@ jobs:
         env:
           AXM_RIG_PLAN: ../rig-donor/examples/quadruped_rig_probe_001.json
         run: python -m unittest discover -s tests -v
-      - name: Build exact dense sampled Organic evidence
+      - name: Build exact dense sampled Organic evidence and bounded successor search
         if: matrix.python-version == '3.11'
         working-directory: animal
         env:
@@ -47,13 +47,24 @@ jobs:
             --rig-donor-head 04760112deb81a8d145226fe7ee02923107c9916 \
             --out evidence/organic-elbow-balanced-dense-sweep-003
 
+          python tools/build_organic_elbow_dense_parameter_search.py \
+            --source examples/quadruped_neutral_001.json \
+            --rig-plan ../rig-donor/examples/quadruped_rig_probe_001.json \
+            --weighting-profile ../rig-donor/examples/quadruped_weighting_refinement_001.json \
+            --rig-donor-head 04760112deb81a8d145226fe7ee02923107c9916 \
+            --out evidence/organic-elbow-balanced-dense-sweep-003
+
           test -s evidence/organic-elbow-balanced-dense-sweep-003/balanced-elbow-dense-sweep-receipt.json
           test -s evidence/organic-elbow-balanced-dense-sweep-003/balanced-elbow-dense-sweep-margins.svg
+          test -s evidence/organic-elbow-balanced-dense-sweep-003/dense-parameter-search-receipt.json
+          test -s evidence/organic-elbow-balanced-dense-sweep-003/dense-parameter-search-grid.svg
           test -s evidence/organic-elbow-balanced-dense-sweep-003/pose-schedule.json
           grep -q 'axm.animal-organic-elbow-balanced-dense-sweep/v0.1' \
             evidence/organic-elbow-balanced-dense-sweep-003/balanced-elbow-dense-sweep-receipt.json
+          grep -q 'axm.animal-organic-elbow-dense-parameter-search/v0.1' \
+            evidence/organic-elbow-balanced-dense-sweep-003/dense-parameter-search-receipt.json
           grep -q 'HOLD_VISUAL_AND_SOURCE_ADOPTION' \
-            evidence/organic-elbow-balanced-dense-sweep-003/balanced-elbow-dense-sweep-receipt.json
+            evidence/organic-elbow-balanced-dense-sweep-003/dense-parameter-search-receipt.json
           git rev-parse HEAD > evidence/organic-elbow-balanced-dense-sweep-003/exact-head.txt
           printf '%s\n' '04760112deb81a8d145226fe7ee02923107c9916' > evidence/organic-elbow-balanced-dense-sweep-003/rig-donor-head.txt
       - name: Upload exact dense sampled Organic evidence
