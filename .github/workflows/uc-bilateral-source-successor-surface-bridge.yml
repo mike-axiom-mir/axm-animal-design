@@ -2,6 +2,8 @@ name: UC bilateral source-successor surface bridge evidence
 
 on:
   pull_request:
+  push:
+    branches: [studio/uc-surface-bridge-001]
 
 jobs:
   bilateral-source-successor-current-uc-surface-bridge:
@@ -10,7 +12,7 @@ jobs:
       - name: Checkout exact Technical Art head
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.pull_request.head.sha }}
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 0
       - name: Set up Python
         uses: actions/setup-python@v5
