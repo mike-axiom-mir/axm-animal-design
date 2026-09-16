@@ -182,13 +182,13 @@ jobs:
       - name: Build exact source-successor Animation -> current UC clock evidence
         env:
           AXM_ANIMAL_ANIMATION_COMMIT: badd8574b1acb5b4adf23544a9befc7cad86d1a1
-          AXM_ANIMAL_ANIMATION_CHECKOUT: .animal-animation-successor
+          AXM_ANIMAL_ANIMATION_CHECKOUT: ${{ github.workspace }}/.animal-animation-successor
           AXM_ANIMAL_SUCCESSOR_RIGGING_COMMIT: b48bb957622ed5c82a24ca4fcb471f7ee9b5147a
-          AXM_ANIMAL_SUCCESSOR_RIGGING_CHECKOUT: .animal-rigging-successor
+          AXM_ANIMAL_SUCCESSOR_RIGGING_CHECKOUT: ${{ github.workspace }}/.animal-rigging-successor
           AXM_ANIMAL_RIG_DONOR_COMMIT: 04760112deb81a8d145226fe7ee02923107c9916
-          AXM_ANIMAL_RIG_DONOR_CHECKOUT: .animal-rig-donor
+          AXM_ANIMAL_RIG_DONOR_CHECKOUT: ${{ github.workspace }}/.animal-rig-donor
           AXM_UC_COMMIT: 091c90047a38894ebdb88dba268f1212411a6cc4
-          AXM_UC_CHECKOUT: .uc-source-successor-runtime
+          AXM_UC_CHECKOUT: ${{ github.workspace }}/.uc-source-successor-runtime
         run: PYTHONPATH=.uc-source-successor-runtime/src python tools/build_uc_source_successor_animation_clock_bridge_evidence.py
       - name: Retain exact checkout identities
         run: |
