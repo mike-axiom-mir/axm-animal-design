@@ -1,0 +1,92 @@
+name: Rigging bilateral deformed tangent-frame evidence
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  rigging-bilateral-deformed-tangent-frames:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ['3.11', '3.13']
+    steps:
+      - name: Checkout exact Rigging head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          path: animal
+          fetch-depth: 0
+
+      - name: Prove exact dependency ancestry and module identities
+        working-directory: animal
+        run: |
+          git merge-base --is-ancestor ca4bb8a2f144231f8755eacc980785d1807b79db HEAD
+          git merge-base --is-ancestor 91e2fd01be63df807c035b39f7ec824a4a5a60b8 HEAD
+          test "$(git hash-object src/axm_animal_design/bilateral_uv_tangent_basis.py)" = "ba0b4e620f132413606177358e47bd32ae4d4965"
+          test "$(git hash-object src/axm_animal_design/bilateral_deformed_logical_quad_normals.py)" = "b8df083310727dcd05e7476b2158a081a5c25c8f"
+          test "$(git hash-object src/axm_animal_design/bilateral_source_successor_rigging_rebind.py)" = "f0cdcd7bf2452e73070efc872f53274a5ae3bcba"
+
+      - name: Checkout exact Rigging plan and weighting-profile donor
+        uses: actions/checkout@v4
+        with:
+          repository: mike-axiom-mir/axm-animal-design
+          ref: 04760112deb81a8d145226fe7ee02923107c9916
+          path: rig-donor
+
+      - name: Verify exact Rigging donor checkout
+        run: test "$(git -C rig-donor rev-parse HEAD)" = "04760112deb81a8d145226fe7ee02923107c9916"
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Compile
+        working-directory: animal
+        run: python -m compileall -q src tests tools
+
+      - name: Run full inherited Animal suite plus deformed tangent-frame tests
+        working-directory: animal
+        env:
+          PYTHONPATH: src
+          AXM_RIG_PLAN: ../rig-donor/examples/quadruped_rig_probe_001.json
+          AXM_WEIGHTING_PROFILE: ../rig-donor/examples/quadruped_weighting_refinement_001.json
+        run: python -m unittest discover -s tests -v
+
+      - name: Build exact deformed tangent-frame Rigging evidence
+        if: matrix.python-version == '3.11'
+        working-directory: animal
+        env:
+          PYTHONPATH: src
+        run: |
+          rm -rf evidence/rigging-bilateral-deformed-tangent-frames-001
+          mkdir -p evidence/rigging-bilateral-deformed-tangent-frames-001
+          python tools/build_bilateral_deformed_tangent_frame_evidence.py \
+            --source examples/quadruped_neutral_001.json \
+            --left-profile examples/quadruped_elbow_source_successor_003.json \
+            --bilateral-profile examples/quadruped_elbow_bilateral_successor_003.json \
+            --rig-plan ../rig-donor/examples/quadruped_rig_probe_001.json \
+            --weighting-profile ../rig-donor/examples/quadruped_weighting_refinement_001.json \
+            --geometry-uv-tangent-head ca4bb8a2f144231f8755eacc980785d1807b79db \
+            --parent-rigging-head 91e2fd01be63df807c035b39f7ec824a4a5a60b8 \
+            --rig-donor-head 04760112deb81a8d145226fe7ee02923107c9916 \
+            --geometry-uv-tangent-module-blob ba0b4e620f132413606177358e47bd32ae4d4965 \
+            --deformed-normal-module-blob b8df083310727dcd05e7476b2158a081a5c25c8f \
+            --rigging-source-module-blob f0cdcd7bf2452e73070efc872f53274a5ae3bcba \
+            --current-rigging-head "$(git rev-parse HEAD)" \
+            --out evidence/rigging-bilateral-deformed-tangent-frames-001
+          grep -q 'PASS_BILATERAL_DEFORMED_TANGENT_FRAME_DENSE_SWEEPS' \
+            evidence/rigging-bilateral-deformed-tangent-frames-001/bilateral-deformed-tangent-frame-rigging-receipt.json
+          grep -q '"animation_accepted": false' \
+            evidence/rigging-bilateral-deformed-tangent-frames-001/bilateral-deformed-tangent-frame-rigging-receipt.json
+          grep -q '"runtime_or_controller_accepted": false' \
+            evidence/rigging-bilateral-deformed-tangent-frames-001/bilateral-deformed-tangent-frame-rigging-receipt.json
+
+      - name: Upload exact deformed tangent-frame Rigging evidence
+        if: ${{ always() && matrix.python-version == '3.11' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: animal-rigging-bilateral-deformed-tangent-frames-${{ github.event.pull_request.head.sha || github.sha }}
+          path: animal/evidence/rigging-bilateral-deformed-tangent-frames-001
+          if-no-files-found: error
+          retention-days: 30
