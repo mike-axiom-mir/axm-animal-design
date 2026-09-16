@@ -1,6 +1,10 @@
 import json
 from pathlib import Path
+import sys
 import unittest
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "src"))
 
 from axm_animal_design.bilateral_mirror_surface_topology import (
     _face_correspondence,
@@ -9,8 +13,6 @@ from axm_animal_design.bilateral_mirror_surface_topology import (
 from axm_animal_design.bilateral_source_successor_topology_rebind import (
     build_bilateral_source_successor_topology_rebind,
 )
-
-ROOT = Path(__file__).resolve().parents[1]
 
 
 def _load(path: str):
