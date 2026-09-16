@@ -1,0 +1,40 @@
+name: UC surface bridge evidence
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  exact-cross-repo-bridge:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout animal-design candidate
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Checkout pinned Universal Creation
+        uses: actions/checkout@v4
+        with:
+          repository: mike-axiom-mir/axm-universal-creation
+          ref: 640bd7dc177b90e023aad879b4c00051df7f4ee3
+          path: .uc
+      - name: Compile bridge sources
+        run: python -m compileall -q src tests tools
+      - name: Run bridge unit tests
+        run: PYTHONPATH=src python -m unittest discover -s tests -p 'test_uc_bridge.py' -v
+      - name: Build exact animal -> UC -> GLB evidence
+        env:
+          AXM_UC_COMMIT: 640bd7dc177b90e023aad879b4c00051df7f4ee3
+        run: PYTHONPATH=src:.uc/src python tools/build_uc_bridge_evidence.py
+      - name: Upload exact bridge evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: quadruped-uc-surface-bridge-evidence
+          path: |
+            evidence/quadruped_uc_surface_001.json
+            evidence/quadruped_uc_bridge_001.glb
+            evidence/quadruped_uc_bridge_001.evidence.json
+          if-no-files-found: error
