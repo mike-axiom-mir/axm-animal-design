@@ -119,7 +119,7 @@ def main() -> int:
     )
     if topology_prerequisite["state"] != "PASS_BILATERAL_SOURCE_SUCCESSOR_LOCAL_TOPOLOGY_REBIND":
         raise SystemExit("historical topology prerequisite is not PASS")
-    if exact_geometry["state"] != "PASS_EXACT_MIRROR_SURFACE_TOPOLOGY_CANDIDATE":
+    if exact_geometry["state"] != "PASS_BILATERAL_EXACT_MIRROR_SURFACE_TOPOLOGY_REPAIR":
         raise SystemExit("exact-mirror topology prerequisite is not PASS")
     if historical_right["positions"] != exact_right["positions"]:
         raise SystemExit("historical/exact right positions are not identical")
