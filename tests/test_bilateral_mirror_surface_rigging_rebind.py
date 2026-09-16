@@ -2,8 +2,12 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 import unittest
 from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "src"))
 
 from axm_animal_design.bilateral_mirror_surface_rigging_rebind import (
     PASS_STATE,
@@ -15,7 +19,6 @@ from axm_animal_design.bilateral_source_successor_rigging_rebind import (
 )
 from axm_animal_design.connected_deformation import BASELINE_WEIGHTING
 
-ROOT = Path(__file__).resolve().parents[1]
 RIG_PLAN = os.environ.get("AXM_RIG_PLAN")
 WEIGHTING_PROFILE = os.environ.get("AXM_WEIGHTING_PROFILE")
 
