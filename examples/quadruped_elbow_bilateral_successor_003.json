@@ -1,0 +1,77 @@
+{
+  "schema": "axm.animal-organic-bilateral-form-successor/v0.1",
+  "id": "quadruped-front-elbow-bilateral-form-successor-003",
+  "base_source": {
+    "name": "quadruped-neutral-001",
+    "digest": "9becd2dea714d662e23386aacabd0fa99abd11ff3c08aad7d242138e654f932b"
+  },
+  "left_successor": {
+    "profile_id": "quadruped-front-elbow-L-form-successor-003",
+    "profile_digest": "8dbab7764819ebcbf825f6d0650053b108b8773df3644934738e3ec9f4712e66",
+    "candidate_id": "front-left-connected-chain-elbow-source-successor-003",
+    "candidate_digest": "ace2366d8cd14c00df670b5fe1f0780ab2d01992482455ad5f7c4c9cadffeeba",
+    "geometry_digest": "dfc58bebbbd6e3a73b96fa98dc31bbd6deace79bb1c5ed82671a78d8a048246a"
+  },
+  "right_receiver": {
+    "candidate_id": "front-right-connected-chain-001",
+    "candidate_digest": "d26650fd9b27e8f90cace24ab1f96f2988eb05c05a88bd9994dffe5c2b8d8901",
+    "path_landmarks": [
+      "shoulder_R",
+      "elbow_R",
+      "wrist_R",
+      "front_paw_R"
+    ],
+    "segments": 10
+  },
+  "right_form_change": {
+    "landmark": "elbow_R",
+    "path_index": 1,
+    "axis": [
+      0.0,
+      -1.0,
+      0.0
+    ],
+    "nominal_bend_plane_radius_m": 0.09,
+    "bend_plane_radius_m": 0.0885,
+    "joint_axis_width_scale": 1.03
+  },
+  "mirror_contract": {
+    "plane": "Y=0",
+    "landmark_pairs": [
+      [
+        "shoulder_L",
+        "shoulder_R"
+      ],
+      [
+        "elbow_L",
+        "elbow_R"
+      ],
+      [
+        "wrist_L",
+        "wrist_R"
+      ],
+      [
+        "front_paw_L",
+        "front_paw_R"
+      ]
+    ],
+    "ring_segment_map": [
+      0,
+      9,
+      8,
+      7,
+      6,
+      5,
+      4,
+      3,
+      2,
+      1
+    ],
+    "maximum_position_residual_m": 0.0
+  },
+  "ownership": {
+    "source_owner": "organic-form",
+    "source_owned_successor": true,
+    "canonical": false
+  }
+}
