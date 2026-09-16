@@ -12,7 +12,11 @@ import os
 from pathlib import Path
 
 from axm_animal_design.organic_form import build_form_study
-from axm_animal_design.topology_study import build_connected_chain, derive_shared_ring_radii
+from axm_animal_design.topology_study import (
+    build_connected_chain,
+    derive_shared_ring_radii,
+    inspect_vertex_fan_connectivity,
+)
 from axm_uc.mesh_topology import inspect_mesh_topology
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -63,6 +67,7 @@ def main() -> None:
         segments=10,
     )
     after = inspect_mesh_topology(candidate["positions"], candidate["indices"], weld_tolerance=1e-6)
+    vertex_fans = inspect_vertex_fan_connectivity(candidate["positions"], candidate["indices"])
 
     gates = {
         "original-three-components-observed": "PASS" if before["triangle_component_count"] == 3 else "FAIL",
@@ -71,6 +76,12 @@ def main() -> None:
         "candidate-no-nonmanifold-edges": "PASS" if after["nonmanifold_edge_count"] == 0 else "FAIL",
         "candidate-shared-edge-orientation": "PASS" if after["orientation_conflict_edge_count"] == 0 else "FAIL",
         "candidate-no-collapse": "PASS" if after["collapsed_triangle_count"] == 0 else "FAIL",
+        "candidate-no-isolated-indexed-vertices": (
+            "PASS" if vertex_fans["isolated_vertex_count"] == 0 else "FAIL"
+        ),
+        "candidate-one-indexed-fan-per-vertex": (
+            "PASS" if vertex_fans["disconnected_vertex_fan_count"] == 0 else "FAIL"
+        ),
         "candidate-radii-derived-from-source-regions": (
             "PASS" if candidate["radii"] == radius_derivation["radii_m"] else "FAIL"
         ),
@@ -78,7 +89,7 @@ def main() -> None:
     status = "PASS" if all(value == "PASS" for value in gates.values()) else "FAIL"
 
     receipt = {
-        "schema": "axm.animal-connected-chain-topology-evidence/v0.2",
+        "schema": "axm.animal-connected-chain-topology-evidence/v0.3",
         "status": status,
         "source_name": spec["name"],
         "source_digest": baseline["source_digest"],
@@ -108,6 +119,7 @@ def main() -> None:
             "vertices": len(candidate["positions"]),
             "triangles": len(candidate["indices"]) // 3,
             "topology": after,
+            "indexed_vertex_fans": vertex_fans,
             "candidate_digest": digest(candidate),
         },
         "delta": {
@@ -120,6 +132,7 @@ def main() -> None:
             "canonical_organic_baseline_modified": False,
             "candidate_is_visual_acceptance": False,
             "candidate_is_deformation_acceptance": False,
+            "candidate_indexed_vertex_fan_connectivity_checked": True,
             "candidate_is_self_intersection_proof": False,
             "candidate_is_game_ready": False,
             "uc_donor_pass_transferred_without_retest": False,
@@ -142,6 +155,9 @@ def main() -> None:
         "after_vertices": len(candidate["positions"]),
         "before_triangles": len(original_indices) // 3,
         "after_triangles": len(candidate["indices"]) // 3,
+        "indexed_vertex_fan_status": vertex_fans["status"],
+        "disconnected_vertex_fans": vertex_fans["disconnected_vertex_fan_count"],
+        "isolated_indexed_vertices": vertex_fans["isolated_vertex_count"],
         "radius_policy": radius_derivation["policy"],
         "wrist_radius_gap_m": radius_derivation["junctions"][1]["authored_radius_gap_m"],
         "candidate_digest": receipt["after"]["candidate_digest"],
