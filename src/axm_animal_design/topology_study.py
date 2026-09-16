@@ -90,6 +90,85 @@ def _frames(tangents):
     return frames
 
 
+def derive_shared_ring_radii(regions: Iterable[dict], region_ids: Sequence[str]) -> dict:
+    """Derive shared-ring radii from an ordered source segment chain.
+
+    Endpoints preserve the source segment endpoint radii exactly. When two source
+    segments meet at one landmark with different endpoint radii, the connected
+    candidate uses their arithmetic mean for that one shared ring and records both
+    authored values. This keeps the reconciliation policy explicit instead of
+    silently hand-authoring a replacement radius.
+    """
+    if isinstance(region_ids, (str, bytes)) or not isinstance(region_ids, (list, tuple)) or not region_ids:
+        raise ValueError("region_ids must be a non-empty ordered sequence")
+
+    by_id = {}
+    for index, region in enumerate(regions):
+        if not isinstance(region, dict):
+            raise ValueError(f"regions[{index}] must be an object")
+        identifier = region.get("id")
+        if not isinstance(identifier, str) or not identifier:
+            raise ValueError(f"regions[{index}].id must be non-empty text")
+        if identifier in by_id:
+            raise ValueError(f"duplicate region id {identifier}")
+        by_id[identifier] = region
+
+    selected = []
+    for index, identifier in enumerate(region_ids):
+        if not isinstance(identifier, str) or not identifier:
+            raise ValueError(f"region_ids[{index}] must be non-empty text")
+        if identifier not in by_id:
+            raise ValueError(f"unknown region id {identifier}")
+        region = by_id[identifier]
+        if region.get("kind") != "segment":
+            raise ValueError(f"{identifier} must be a segment region")
+        a, b = region.get("a"), region.get("b")
+        if not isinstance(a, str) or not a or not isinstance(b, str) or not b:
+            raise ValueError(f"{identifier} must reference named endpoint landmarks")
+        radius_a = _num(region.get("radius_a"), f"{identifier}.radius_a")
+        radius_b = _num(region.get("radius_b"), f"{identifier}.radius_b")
+        if radius_a <= 0 or radius_b <= 0:
+            raise ValueError(f"{identifier} radii must be > 0")
+        selected.append({
+            "id": identifier,
+            "a": a,
+            "b": b,
+            "radius_a": radius_a,
+            "radius_b": radius_b,
+        })
+
+    path_landmarks = [selected[0]["a"]]
+    radii = [selected[0]["radius_a"]]
+    junctions = []
+    for left, right in zip(selected, selected[1:]):
+        if left["b"] != right["a"]:
+            raise ValueError(f"source segment chain is discontinuous: {left['id']} -> {right['id']}")
+        incoming = left["radius_b"]
+        outgoing = right["radius_a"]
+        shared = (incoming + outgoing) * 0.5
+        path_landmarks.append(left["b"])
+        radii.append(shared)
+        junctions.append({
+            "landmark": left["b"],
+            "incoming_region": left["id"],
+            "outgoing_region": right["id"],
+            "incoming_radius_m": incoming,
+            "outgoing_radius_m": outgoing,
+            "shared_ring_radius_m": shared,
+            "authored_radius_gap_m": abs(incoming - outgoing),
+        })
+
+    path_landmarks.append(selected[-1]["b"])
+    radii.append(selected[-1]["radius_b"])
+    return {
+        "policy": "preserve-endpoints_mean-adjacent-junction-radii",
+        "region_ids": list(region_ids),
+        "path_landmarks": path_landmarks,
+        "radii_m": radii,
+        "junctions": junctions,
+    }
+
+
 def build_connected_chain(
     identifier: str,
     points: Iterable[Sequence[float]],
