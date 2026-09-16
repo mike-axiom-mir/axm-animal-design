@@ -1,0 +1,109 @@
+name: UC bilateral mirror-surface topology bridge evidence
+
+on:
+  pull_request:
+  push:
+    branches: [studio/uc-surface-bridge-001]
+
+jobs:
+  bilateral-mirror-surface-current-uc-bridge:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout exact Technical Art head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Checkout exact Geometry mirror-surface producer
+        uses: actions/checkout@v4
+        with:
+          repository: mike-axiom-mir/axm-animal-design
+          ref: bdbb51303bd1b96866b06a71730ccc328bf4f2f6
+          path: .animal-geometry-mirror
+      - name: Checkout pinned UC topology observer required by Geometry producers
+        uses: actions/checkout@v4
+        with:
+          repository: mike-axiom-mir/axm-universal-creation
+          ref: b434a349cf159b392148b4dc9d68146573531a60
+          path: .uc-topology-donor
+      - name: Checkout exact Rigging plan donor required by mirror-surface producer
+        uses: actions/checkout@v4
+        with:
+          repository: mike-axiom-mir/axm-animal-design
+          ref: 04760112deb81a8d145226fe7ee02923107c9916
+          path: .animal-rig-donor
+      - name: Checkout previous proven UC surface pin
+        uses: actions/checkout@v4
+        with:
+          repository: mike-axiom-mir/axm-universal-creation
+          ref: ecef151548736628cff62652a36be6eb1c7b1ad6
+          path: .uc-mirror-previous
+      - name: Checkout current Universal Creation
+        uses: actions/checkout@v4
+        with:
+          repository: mike-axiom-mir/axm-universal-creation
+          ref: bb090c470379542d38d24eea403832400c84a7b4
+          path: .uc-mirror-current
+      - name: Verify exact donor identities
+        run: |
+          test "$(git -C .animal-geometry-mirror rev-parse HEAD)" = "bdbb51303bd1b96866b06a71730ccc328bf4f2f6"
+          test "$(git -C .uc-topology-donor rev-parse HEAD)" = "b434a349cf159b392148b4dc9d68146573531a60"
+          test "$(git -C .animal-rig-donor rev-parse HEAD)" = "04760112deb81a8d145226fe7ee02923107c9916"
+          test "$(git -C .uc-mirror-previous rev-parse HEAD)" = "ecef151548736628cff62652a36be6eb1c7b1ad6"
+          test "$(git -C .uc-mirror-current rev-parse HEAD)" = "bb090c470379542d38d24eea403832400c84a7b4"
+      - name: Compile Technical Art bridge and run existing bridge unit tests
+        run: |
+          python -m compileall -q src tests tools/build_uc_bilateral_mirror_surface_bridge_evidence.py
+          PYTHONPATH=src python -m unittest discover -s tests -p 'test_uc_bridge.py' -v
+      - name: Regenerate exact bilateral source-successor base through Geometry owner
+        run: |
+          mkdir -p evidence/uc_bilateral_mirror_surface/base-producer
+          PYTHONPATH=.animal-geometry-mirror/src:.uc-topology-donor/src \
+            python .animal-geometry-mirror/tools/build_bilateral_source_successor_topology_rebind_evidence.py \
+              --source .animal-geometry-mirror/examples/quadruped_neutral_001.json \
+              --left-profile .animal-geometry-mirror/examples/quadruped_elbow_source_successor_003.json \
+              --bilateral-profile .animal-geometry-mirror/examples/quadruped_elbow_bilateral_successor_003.json \
+              --out evidence/uc_bilateral_mirror_surface/base-producer
+      - name: Regenerate exact mirror-surface successor through Geometry owner
+        run: |
+          mkdir -p evidence/uc_bilateral_mirror_surface/mirror-producer
+          PYTHONPATH=.animal-geometry-mirror/src:.uc-topology-donor/src \
+            python .animal-geometry-mirror/tools/build_bilateral_mirror_surface_topology_evidence.py \
+              --source .animal-geometry-mirror/examples/quadruped_neutral_001.json \
+              --left-profile .animal-geometry-mirror/examples/quadruped_elbow_source_successor_003.json \
+              --bilateral-profile .animal-geometry-mirror/examples/quadruped_elbow_bilateral_successor_003.json \
+              --rig-plan .animal-rig-donor/examples/quadruped_rig_probe_001.json \
+              --geometry-head bdbb51303bd1b96866b06a71730ccc328bf4f2f6 \
+              --rigging-head 94bc573e2e06ba7a35c9908c141e2f939d4739a8 \
+              --uc-head b434a349cf159b392148b4dc9d68146573531a60 \
+              --out evidence/uc_bilateral_mirror_surface/mirror-producer
+      - name: Build exact mirror-surface Geometry -> current UC -> GLB evidence
+        env:
+          AXM_ANIMAL_GEOMETRY_COMMIT: bdbb51303bd1b96866b06a71730ccc328bf4f2f6
+          AXM_ANIMAL_GEOMETRY_CHECKOUT: ${{ github.workspace }}/.animal-geometry-mirror
+          AXM_GEOMETRY_BASE_EVIDENCE: ${{ github.workspace }}/evidence/uc_bilateral_mirror_surface/base-producer
+          AXM_GEOMETRY_MIRROR_EVIDENCE: ${{ github.workspace }}/evidence/uc_bilateral_mirror_surface/mirror-producer
+          AXM_PREVIOUS_UC_COMMIT: ecef151548736628cff62652a36be6eb1c7b1ad6
+          AXM_PREVIOUS_UC_CHECKOUT: ${{ github.workspace }}/.uc-mirror-previous
+          AXM_UC_COMMIT: bb090c470379542d38d24eea403832400c84a7b4
+          AXM_UC_CHECKOUT: ${{ github.workspace }}/.uc-mirror-current
+        run: PYTHONPATH=src:.uc-mirror-current/src python tools/build_uc_bilateral_mirror_surface_bridge_evidence.py
+      - name: Retain exact checkout identities
+        run: |
+          git rev-parse HEAD > evidence/uc_bilateral_mirror_surface/technical-art-head.txt
+          git -C .animal-geometry-mirror rev-parse HEAD > evidence/uc_bilateral_mirror_surface/geometry-head.txt
+          git -C .uc-mirror-previous rev-parse HEAD > evidence/uc_bilateral_mirror_surface/previous-uc-head.txt
+          git -C .uc-mirror-current rev-parse HEAD > evidence/uc_bilateral_mirror_surface/uc-head.txt
+          git -C .uc-mirror-previous rev-parse HEAD:src/axm_uc/procedural_3d.py > evidence/uc_bilateral_mirror_surface/previous-uc-procedural-3d-blob.txt
+          git -C .uc-mirror-current rev-parse HEAD:src/axm_uc/procedural_3d.py > evidence/uc_bilateral_mirror_surface/uc-procedural-3d-blob.txt
+          grep -q 'PASS_BILATERAL_EXACT_MIRROR_SURFACE_TO_CURRENT_UC_GLB' evidence/uc_bilateral_mirror_surface/quadruped_bilateral_mirror_surface_uc_bridge.evidence.json
+      - name: Upload exact mirror-surface static UC bridge evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: quadruped-bilateral-mirror-surface-current-uc-bridge-evidence
+          path: evidence/uc_bilateral_mirror_surface/
+          if-no-files-found: error
