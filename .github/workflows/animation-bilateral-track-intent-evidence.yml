@@ -1,0 +1,150 @@
+name: Animation bilateral track intent evidence
+
+on:
+  push:
+    branches:
+      - studio/animation-quadruped-articulation-loop-001
+    paths:
+      - "tools/build_bilateral_animation_track_intent_evidence.py"
+      - "examples/quadruped_articulation_loop_001.json"
+      - ".github/workflows/animation-bilateral-track-intent-evidence.yml"
+  pull_request:
+    paths:
+      - "tools/build_bilateral_animation_track_intent_evidence.py"
+      - "examples/quadruped_articulation_loop_001.json"
+      - ".github/workflows/animation-bilateral-track-intent-evidence.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  bilateral-track-intent:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      matrix:
+        python-version: ['3.11', '3.13']
+    steps:
+      - name: Check out exact Animation lane head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+          path: animal
+
+      - name: Bind proof to exact Animation lineage
+        working-directory: animal
+        shell: bash
+        run: |
+          set -euo pipefail
+          EXACT_HEAD_SHA="$(git rev-parse HEAD)"
+          echo "EXACT_HEAD_SHA=${EXACT_HEAD_SHA}" >> "$GITHUB_ENV"
+          if [ -n "${{ github.event.pull_request.head.sha }}" ]; then
+            test "${EXACT_HEAD_SHA}" = "${{ github.event.pull_request.head.sha }}"
+          else
+            test "${EXACT_HEAD_SHA}" = "${GITHUB_SHA}"
+          fi
+          git merge-base --is-ancestor badd8574b1acb5b4adf23544a9befc7cad86d1a1 HEAD
+
+      - name: Check out exact Organic bilateral source donor
+        uses: actions/checkout@v4
+        with:
+          repository: mike-axiom-mir/axm-animal-design
+          ref: 4df3024b4c459675422565501a46f622acf229a9
+          path: organic-bilateral
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Preserve receiving repository gates
+        working-directory: animal
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m compileall -q src tests tools
+          python -m unittest discover -s tests -v
+
+      - name: Reject silent bilateral track drift
+        if: matrix.python-version == '3.11'
+        working-directory: animal
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          src = Path('examples/quadruped_articulation_loop_001.json')
+          dst = Path('/tmp/quadruped_articulation_loop_right_drift.json')
+          payload = json.loads(src.read_text())
+          for track in payload['tracks']:
+              if track['joint_id'] == 'front-elbow-R':
+                  track['peak_angle_deg'] = 17.5
+          dst.write_text(json.dumps(payload, indent=2, sort_keys=True) + '\n')
+          PY
+          if python tools/build_bilateral_animation_track_intent_evidence.py \
+            --clip /tmp/quadruped_articulation_loop_right_drift.json \
+            --bilateral-profile ../organic-bilateral/examples/quadruped_elbow_bilateral_successor_003.json \
+            --organic-bilateral-head 4df3024b4c459675422565501a46f622acf229a9 \
+            --out evidence/negative-bilateral-track-intent; then
+            echo "silent bilateral track drift unexpectedly passed"
+            exit 1
+          fi
+          rm -rf evidence/negative-bilateral-track-intent
+
+      - name: Prove exact bilateral authored track intent and retain right-surface hold
+        working-directory: animal
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf evidence/animation-bilateral-track-intent-001
+          python tools/build_bilateral_animation_track_intent_evidence.py \
+            --clip examples/quadruped_articulation_loop_001.json \
+            --bilateral-profile ../organic-bilateral/examples/quadruped_elbow_bilateral_successor_003.json \
+            --organic-bilateral-head 4df3024b4c459675422565501a46f622acf229a9 \
+            --out evidence/animation-bilateral-track-intent-001
+          printf '%s\n' "$EXACT_HEAD_SHA" > evidence/animation-bilateral-track-intent-001/exact-head.txt
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+          root = Path('evidence/animation-bilateral-track-intent-001')
+          receipt = json.loads((root / 'bilateral_track_intent_receipt.json').read_text())
+          samples = json.loads((root / 'bilateral_track_samples.json').read_text())
+          assert receipt['gate'] == 'PASS_BILATERAL_CLIP_TRACK_INTENT_PRESERVED__RIGHT_SURFACE_PLAYBACK_HELD', receipt
+          assert receipt['receiving_repository']['git_head'] == os.environ['EXACT_HEAD_SHA'], receipt
+          assert receipt['authored_clip']['motion_changed'] is False, receipt
+          assert receipt['authored_clip']['retimed'] is False, receipt
+          assert receipt['authored_clip']['new_keys_authored'] is False, receipt
+          assert receipt['organic_bilateral_source_handoff']['git_head'] == '4df3024b4c459675422565501a46f622acf229a9', receipt
+          assert receipt['organic_bilateral_source_handoff']['left_source_successor_digest'] == 'ace2366d8cd14c00df670b5fe1f0780ab2d01992482455ad5f7c4c9cadffeeba', receipt
+          assert receipt['organic_bilateral_source_handoff']['right_source_successor_digest_from_organic_handoff'] == '262f536e0e522fd3e102cb16464c3757985fbb1dfcb3001df3b1f27b623b0115', receipt
+          observed = receipt['observed_authored_motion']
+          assert observed['maximum_front_pair_angle_residual_deg'] == 0.0, observed
+          assert observed['maximum_hind_pair_angle_residual_deg'] == 0.0, observed
+          assert observed['exact_neutral_start_return'] is True, observed
+          boundary = receipt['adoption_boundary']
+          assert boundary['right_geometry_identity_consumed_by_animation'] is False, boundary
+          assert boundary['right_rigging_identity_consumed_by_animation'] is False, boundary
+          assert boundary['right_deforming_surface_generated'] is False, boundary
+          assert boundary['right_target_host_playback_generated'] is False, boundary
+          assert len(samples['samples']) == 41, samples
+          assert samples['samples'][0]['front_elbow_L_deg'] == 0.0
+          assert samples['samples'][20]['front_elbow_L_deg'] == 18.0
+          assert samples['samples'][20]['front_elbow_R_deg'] == 18.0
+          assert samples['samples'][40]['front_elbow_R_deg'] == 0.0
+          print(json.dumps(receipt, indent=2))
+          PY
+
+      - name: Upload exact bilateral track-intent evidence
+        if: matrix.python-version == '3.11'
+        uses: actions/upload-artifact@v4
+        with:
+          name: quadruped-bilateral-track-intent-${{ env.EXACT_HEAD_SHA }}
+          path: |
+            animal/evidence/animation-bilateral-track-intent-001/bilateral_track_intent_receipt.json
+            animal/evidence/animation-bilateral-track-intent-001/bilateral_track_samples.json
+            animal/evidence/animation-bilateral-track-intent-001/exact-head.txt
+          if-no-files-found: error
+          retention-days: 30
