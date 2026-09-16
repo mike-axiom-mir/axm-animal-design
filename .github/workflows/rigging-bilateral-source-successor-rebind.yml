@@ -20,25 +20,17 @@ jobs:
       - name: Prove exact bilateral Geometry ancestry
         working-directory: animal
         run: git merge-base --is-ancestor f89af95d621c36da3994c6660552da8bbc73fd1b HEAD
-      - name: Checkout exact Rigging plan donor
+      - name: Checkout exact Rigging plan and weighting-profile file donor
         uses: actions/checkout@v4
         with:
           repository: mike-axiom-mir/axm-animal-design
           ref: 04760112deb81a8d145226fe7ee02923107c9916
           path: rig-donor
-      - name: Checkout exact historical weighting donor
-        uses: actions/checkout@v4
-        with:
-          repository: mike-axiom-mir/axm-animal-design
-          ref: 5625c9f796a75e8b441458c51093e55519490611
-          path: weighting-donor
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
-      - name: Verify exact donor checkouts
-        run: |
-          test "$(git -C rig-donor rev-parse HEAD)" = "04760112deb81a8d145226fe7ee02923107c9916"
-          test "$(git -C weighting-donor rev-parse HEAD)" = "5625c9f796a75e8b441458c51093e55519490611"
+      - name: Verify exact donor checkout
+        run: test "$(git -C rig-donor rev-parse HEAD)" = "04760112deb81a8d145226fe7ee02923107c9916"
       - name: Compile
         working-directory: animal
         run: python -m compileall -q src tests tools
@@ -59,7 +51,7 @@ jobs:
             --left-profile examples/quadruped_elbow_source_successor_003.json \
             --bilateral-profile examples/quadruped_elbow_bilateral_successor_003.json \
             --rig-plan ../rig-donor/examples/quadruped_rig_probe_001.json \
-            --weighting-profile ../weighting-donor/examples/quadruped_weighting_refinement_001.json \
+            --weighting-profile ../rig-donor/examples/quadruped_weighting_refinement_001.json \
             --geometry-head f89af95d621c36da3994c6660552da8bbc73fd1b \
             --historical-left-rigging-head b48bb957622ed5c82a24ca4fcb471f7ee9b5147a \
             --rig-donor-head 04760112deb81a8d145226fe7ee02923107c9916 \
@@ -75,8 +67,8 @@ jobs:
           printf '%s\n' 'f89af95d621c36da3994c6660552da8bbc73fd1b' > evidence/rigging-bilateral-source-successor-rebind-001/geometry-bilateral-head.txt
           printf '%s\n' '4df3024b4c459675422565501a46f622acf229a9' > evidence/rigging-bilateral-source-successor-rebind-001/organic-bilateral-head.txt
           printf '%s\n' 'b48bb957622ed5c82a24ca4fcb471f7ee9b5147a' > evidence/rigging-bilateral-source-successor-rebind-001/historical-left-rigging-head.txt
-          printf '%s\n' '04760112deb81a8d145226fe7ee02923107c9916' > evidence/rigging-bilateral-source-successor-rebind-001/rig-plan-donor-head.txt
-          printf '%s\n' '5625c9f796a75e8b441458c51093e55519490611' > evidence/rigging-bilateral-source-successor-rebind-001/weighting-profile-donor-head.txt
+          printf '%s\n' '04760112deb81a8d145226fe7ee02923107c9916' > evidence/rigging-bilateral-source-successor-rebind-001/rig-plan-and-profile-file-donor-head.txt
+          printf '%s\n' '5625c9f796a75e8b441458c51093e55519490611' > evidence/rigging-bilateral-source-successor-rebind-001/historical-weighting-verification-head.txt
       - name: Upload exact bilateral Rigging evidence
         if: ${{ always() && matrix.python-version == '3.11' }}
         uses: actions/upload-artifact@v4
