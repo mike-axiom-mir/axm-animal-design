@@ -1,0 +1,106 @@
+name: Rigging bilateral deformed logical-quad normal evidence
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  rigging-bilateral-deformed-logical-quad-normals:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ['3.11', '3.13']
+    steps:
+      - name: Checkout exact Rigging head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          path: animal
+          fetch-depth: 0
+
+      - name: Prove exact dependency ancestry and module identities
+        working-directory: animal
+        run: |
+          git merge-base --is-ancestor a2cd0a6135a7c8502aef9572f7079a3dd2632103 HEAD
+          git merge-base --is-ancestor 79e1667f6cc91e2ec8e41f01df18b6933c9c876d HEAD
+          git merge-base --is-ancestor bdbb51303bd1b96866b06a71730ccc328bf4f2f6 HEAD
+          test "$(git hash-object src/axm_animal_design/bilateral_logical_quad_normals.py)" = "14a1ba3a1e4c96270197f4f449505113f7bf3e6e"
+          test "$(git hash-object src/axm_animal_design/bilateral_source_successor_rigging_rebind.py)" = "f0cdcd7bf2452e73070efc872f53274a5ae3bcba"
+
+      - name: Checkout exact historical Rigging mirror-surface donor
+        uses: actions/checkout@v4
+        with:
+          repository: mike-axiom-mir/axm-animal-design
+          ref: 4acd9286140dd008f2a4f01ff513912497313e4f
+          path: rigging-pr15
+
+      - name: Verify exact historical Rigging module identity
+        run: |
+          test "$(git -C rigging-pr15 rev-parse HEAD)" = "4acd9286140dd008f2a4f01ff513912497313e4f"
+          test "$(git -C rigging-pr15 hash-object src/axm_animal_design/bilateral_mirror_surface_rigging_rebind.py)" = "038f71f598ab51f47f023b6f33ec1bcc1bedaa7b"
+
+      - name: Checkout exact Rigging plan and weighting-profile donor
+        uses: actions/checkout@v4
+        with:
+          repository: mike-axiom-mir/axm-animal-design
+          ref: 04760112deb81a8d145226fe7ee02923107c9916
+          path: rig-donor
+
+      - name: Verify exact Rigging donor checkout
+        run: test "$(git -C rig-donor rev-parse HEAD)" = "04760112deb81a8d145226fe7ee02923107c9916"
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Compile
+        working-directory: animal
+        run: python -m compileall -q src tests tools
+
+      - name: Run full inherited Animal suite plus deformed-normal tests
+        working-directory: animal
+        env:
+          PYTHONPATH: src
+          AXM_RIG_PLAN: ../rig-donor/examples/quadruped_rig_probe_001.json
+          AXM_WEIGHTING_PROFILE: ../rig-donor/examples/quadruped_weighting_refinement_001.json
+        run: python -m unittest discover -s tests -v
+
+      - name: Build exact deformed logical-quad normal Rigging evidence
+        if: matrix.python-version == '3.11'
+        working-directory: animal
+        env:
+          PYTHONPATH: src
+        run: |
+          rm -rf evidence/rigging-bilateral-deformed-logical-quad-normals-001
+          mkdir -p evidence/rigging-bilateral-deformed-logical-quad-normals-001
+          python tools/build_bilateral_deformed_logical_quad_normal_evidence.py \
+            --source examples/quadruped_neutral_001.json \
+            --left-profile examples/quadruped_elbow_source_successor_003.json \
+            --bilateral-profile examples/quadruped_elbow_bilateral_successor_003.json \
+            --rig-plan ../rig-donor/examples/quadruped_rig_probe_001.json \
+            --weighting-profile ../rig-donor/examples/quadruped_weighting_refinement_001.json \
+            --normal-geometry-head 79e1667f6cc91e2ec8e41f01df18b6933c9c876d \
+            --materials-review-head a2cd0a6135a7c8502aef9572f7079a3dd2632103 \
+            --topology-head bdbb51303bd1b96866b06a71730ccc328bf4f2f6 \
+            --historical-rigging-head 4acd9286140dd008f2a4f01ff513912497313e4f \
+            --rig-donor-head 04760112deb81a8d145226fe7ee02923107c9916 \
+            --current-rigging-head "$(git rev-parse HEAD)" \
+            --out evidence/rigging-bilateral-deformed-logical-quad-normals-001
+          grep -q 'PASS_BILATERAL_LOGICAL_QUAD_NORMAL_FIELD_DEFORMATION_DENSE_SWEEPS' \
+            evidence/rigging-bilateral-deformed-logical-quad-normals-001/bilateral-deformed-logical-quad-normal-rigging-receipt.json
+          grep -q 'HOLD_WEIGHTING_PROFILE_IDENTITY_DRIFT' \
+            evidence/rigging-bilateral-deformed-logical-quad-normals-001/bilateral-deformed-logical-quad-normal-rigging-receipt.json
+          git rev-parse HEAD > evidence/rigging-bilateral-deformed-logical-quad-normals-001/exact-head.txt
+          printf '%s\n' '79e1667f6cc91e2ec8e41f01df18b6933c9c876d' > evidence/rigging-bilateral-deformed-logical-quad-normals-001/exact-normal-geometry-head.txt
+          printf '%s\n' 'a2cd0a6135a7c8502aef9572f7079a3dd2632103' > evidence/rigging-bilateral-deformed-logical-quad-normals-001/exact-materials-review-head.txt
+          printf '%s\n' 'bdbb51303bd1b96866b06a71730ccc328bf4f2f6' > evidence/rigging-bilateral-deformed-logical-quad-normals-001/exact-topology-head.txt
+          printf '%s\n' '4acd9286140dd008f2a4f01ff513912497313e4f' > evidence/rigging-bilateral-deformed-logical-quad-normals-001/historical-rigging-head.txt
+
+      - name: Upload exact deformed logical-quad normal Rigging evidence
+        if: ${{ always() && matrix.python-version == '3.11' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: animal-rigging-bilateral-deformed-logical-quad-normals-${{ github.event.pull_request.head.sha || github.sha }}
+          path: animal/evidence/rigging-bilateral-deformed-logical-quad-normals-001
+          if-no-files-found: error
+          retention-days: 30
