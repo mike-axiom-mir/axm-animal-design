@@ -1,0 +1,294 @@
+name: Animation bilateral tangent-motion Godot evidence
+
+on:
+  push:
+    branches:
+      - studio/animation-quadruped-articulation-loop-001
+    paths:
+      - "tools/build_bilateral_tangent_motion_godot_evidence.py"
+      - "tools/godot_animation_tangent_motion/**"
+      - "examples/quadruped_articulation_loop_001.json"
+      - ".github/workflows/animation-bilateral-tangent-motion-godot-evidence.yml"
+  pull_request:
+    paths:
+      - "tools/build_bilateral_tangent_motion_godot_evidence.py"
+      - "tools/godot_animation_tangent_motion/**"
+      - "examples/quadruped_articulation_loop_001.json"
+      - ".github/workflows/animation-bilateral-tangent-motion-godot-evidence.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  tangent-motion-godot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out exact Animation lane head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+          path: animal
+
+      - name: Bind evidence to exact Animation lineage
+        working-directory: animal
+        shell: bash
+        run: |
+          set -euo pipefail
+          EXACT_HEAD_SHA="$(git rev-parse HEAD)"
+          echo "EXACT_HEAD_SHA=${EXACT_HEAD_SHA}" >> "$GITHUB_ENV"
+          if [ -n "${{ github.event.pull_request.head.sha }}" ]; then
+            test "${EXACT_HEAD_SHA}" = "${{ github.event.pull_request.head.sha }}"
+          else
+            test "${EXACT_HEAD_SHA}" = "${GITHUB_SHA}"
+          fi
+          git merge-base --is-ancestor 1a8c929ce4372c4b1b1f29e9ac4cadd0cc26ac48 HEAD
+
+      - name: Check out exact deformed-tangent Rigging donor
+        uses: actions/checkout@v4
+        with:
+          repository: mike-axiom-mir/axm-animal-design
+          ref: 63c65d57fda0595217f86d971ff8c67f256188be
+          path: tangent-rigging
+
+      - name: Check out exact historical rig/profile donor
+        uses: actions/checkout@v4
+        with:
+          repository: mike-axiom-mir/axm-animal-design
+          ref: 04760112deb81a8d145226fe7ee02923107c9916
+          path: rig-donor
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Preserve receiving repository gates
+        working-directory: animal
+        run: |
+          set -euo pipefail
+          python -m compileall -q src tests tools
+          python -m unittest discover -s tests -v
+
+      - name: Reject wrong deformed-tangent Rigging identity
+        working-directory: animal
+        shell: bash
+        run: |
+          set -euo pipefail
+          if python tools/build_bilateral_tangent_motion_godot_evidence.py \
+            --rigging-root ../tangent-rigging \
+            --rig-donor-root ../rig-donor \
+            --rigging-head 0000000000000000000000000000000000000000 \
+            --clip examples/quadruped_articulation_loop_001.json \
+            --out evidence/negative-tangent-motion \
+            --payload-dir /tmp/negative-tangent-motion-payload; then
+            echo "wrong deformed-tangent Rigging identity unexpectedly passed"
+            exit 1
+          fi
+          rm -rf evidence/negative-tangent-motion /tmp/negative-tangent-motion-payload
+
+      - name: Reject silent refined-weighting adoption
+        working-directory: animal
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          src = Path('examples/quadruped_articulation_loop_001.json')
+          dst = Path('/tmp/quadruped_articulation_loop_refined_tangent_motion.json')
+          payload = json.loads(src.read_text())
+          payload['rig_weighting_profile'] = 'ease-out-power-0p75-v1'
+          dst.write_text(json.dumps(payload, indent=2, sort_keys=True) + '\n')
+          PY
+          if python tools/build_bilateral_tangent_motion_godot_evidence.py \
+            --rigging-root ../tangent-rigging \
+            --rig-donor-root ../rig-donor \
+            --rigging-head 63c65d57fda0595217f86d971ff8c67f256188be \
+            --clip /tmp/quadruped_articulation_loop_refined_tangent_motion.json \
+            --out evidence/negative-tangent-motion-weighting \
+            --payload-dir /tmp/negative-tangent-motion-weighting-payload; then
+            echo "silent refined weighting adoption unexpectedly passed"
+            exit 1
+          fi
+          rm -rf evidence/negative-tangent-motion-weighting /tmp/negative-tangent-motion-weighting-payload
+
+      - name: Build exact 41-sample bilateral deformed tangent motion packet
+        working-directory: animal
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf evidence/animation-bilateral-tangent-motion-001 tools/godot_animation_tangent_motion/generated
+          python tools/build_bilateral_tangent_motion_godot_evidence.py \
+            --rigging-root ../tangent-rigging \
+            --rig-donor-root ../rig-donor \
+            --rigging-head 63c65d57fda0595217f86d971ff8c67f256188be \
+            --clip examples/quadruped_articulation_loop_001.json \
+            --out evidence/animation-bilateral-tangent-motion-001 \
+            --payload-dir tools/godot_animation_tangent_motion/generated
+          printf '%s\n' "$EXACT_HEAD_SHA" > evidence/animation-bilateral-tangent-motion-001/exact-head.txt
+          python - <<'PY'
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+          evidence = Path('evidence/animation-bilateral-tangent-motion-001')
+          generated = Path('tools/godot_animation_tangent_motion/generated')
+          receipt = json.loads((evidence / 'bilateral_deformed_tangent_motion_receipt.json').read_text())
+          frames = json.loads((evidence / 'bilateral_deformed_tangent_motion_frames.json').read_text())
+          payload_path = generated / 'tangent_motion_payload.json'
+          payload = json.loads(payload_path.read_text())
+          summary = json.loads((generated / 'tangent_motion_payload_summary.json').read_text())
+          assert receipt['gate'] == 'PASS_BILATERAL_DEFORMED_TANGENT_41_SAMPLE_MOTION_BIND', receipt
+          ident = receipt['source_identity']
+          assert ident['rigging_deformed_tangent_head'] == '63c65d57fda0595217f86d971ff8c67f256188be', ident
+          assert ident['geometry_uv_tangent_head'] == 'ca4bb8a2f144231f8755eacc980785d1807b79db', ident
+          assert ident['rig_weighting_profile'] == 'smoothstep-v0', ident
+          observed = receipt['observed']
+          assert observed['total_authored_pose_frames_observed'] == 82, observed
+          assert observed['render_vertices_per_side_per_sample'] == 84, observed
+          assert observed['render_triangles_per_side'] == 80, observed
+          assert observed['maximum_tangent_unit_length_error'] <= 1e-9, observed
+          assert observed['maximum_tangent_normal_dot_abs'] <= 1e-9, observed
+          assert observed['maximum_uv_residual'] <= 1e-9, observed
+          assert observed['handedness_drift_count'] == 0, observed
+          bilateral = observed['bilateral']
+          assert bilateral['maximum_mirrored_position_residual_m'] <= 1e-9, bilateral
+          assert bilateral['maximum_mirrored_normal_residual'] <= 1e-9, bilateral
+          assert bilateral['maximum_uv_residual'] <= 1e-9, bilateral
+          assert bilateral['maximum_mirrored_tangent_xyz_residual'] <= 1e-9, bilateral
+          assert bilateral['tangent_handedness_mismatch_count'] == 0, bilateral
+          assert bilateral['minimum_adjacent_authored_sample_tangent_dot'] > 0.0, bilateral
+          assert len(frames['left']) == 41 and len(frames['right']) == 41, frames
+          assert payload['gate'] == 'PASS_BILATERAL_DEFORMED_TANGENT_GODOT_PAYLOAD_BUILD', payload
+          assert payload['coordinate_bridge']['basis_determinant'] == -1, payload
+          assert payload['coordinate_bridge']['tangent_handedness_flipped'] is True, payload
+          assert summary['payload_sha256'] == hashlib.sha256(payload_path.read_bytes()).hexdigest(), summary
+          assert Path(evidence / 'exact-head.txt').read_text().strip() == os.environ['EXACT_HEAD_SHA']
+          print(json.dumps(receipt, indent=2))
+          PY
+
+      - name: Download pinned Godot 4.7.2
+        env:
+          GODOT_URL: https://github.com/godotengine/godot-builds/releases/download/4.7.2-stable/Godot_v4.7.2-stable_linux.x86_64.zip
+          GODOT_SHA256: cadd3204e728a35d3f13adb7fd0d7902636b79f6b95c40c265eb73b6c35329e4
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .godot-bin
+          curl --fail --location --retry 3 --retry-delay 2 "$GODOT_URL" --output .godot-bin/godot.zip
+          echo "$GODOT_SHA256  .godot-bin/godot.zip" | sha256sum --check --strict
+          unzip -q .godot-bin/godot.zip -d .godot-bin
+          chmod +x .godot-bin/Godot_v4.7.2-stable_linux.x86_64
+          .godot-bin/Godot_v4.7.2-stable_linux.x86_64 --version
+
+      - name: Exercise exact bilateral tangent attributes in Godot
+        shell: bash
+        run: |
+          set -euo pipefail
+          .godot-bin/Godot_v4.7.2-stable_linux.x86_64 \
+            --headless \
+            --path animal/tools/godot_animation_tangent_motion \
+            --script observe.gd
+
+      - name: Validate target-host attribute boundary
+        working-directory: animal
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import hashlib
+          import json
+          from pathlib import Path
+          evidence = Path('evidence/animation-bilateral-tangent-motion-001')
+          generated = Path('tools/godot_animation_tangent_motion/generated')
+          animation = json.loads((evidence / 'bilateral_deformed_tangent_motion_receipt.json').read_text())
+          payload_path = generated / 'tangent_motion_payload.json'
+          summary = json.loads((generated / 'tangent_motion_payload_summary.json').read_text())
+          receipt = json.loads((generated / 'tangent_motion_godot_receipt.json').read_text())
+          assert receipt['state'] == 'PASS_GODOT_BILATERAL_DEFORMED_TANGENT_MOTION_ATTRIBUTE_READBACK', receipt
+          assert receipt['promotion_effect'] == 'NONE', receipt
+          assert receipt['payload_sha256'] == hashlib.sha256(payload_path.read_bytes()).hexdigest(), receipt
+          assert receipt['payload_sha256'] == summary['payload_sha256'], (receipt, summary)
+          assert receipt['source_gate'] == animation['gate'], receipt
+          attrs = receipt['attribute_readback']
+          assert attrs['applications'] == 82, attrs
+          assert attrs['maximum_position_readback_error_m'] <= 1e-6, attrs
+          assert attrs['maximum_normal_readback_error'] <= 1e-6, attrs
+          assert attrs['maximum_uv_readback_error'] <= 1e-6, attrs
+          assert attrs['maximum_tangent_xyz_readback_error'] <= 1e-6, attrs
+          assert attrs['maximum_tangent_w_readback_error'] <= 1e-6, attrs
+          assert attrs['maximum_tangent_normal_dot_abs'] <= 1e-6, attrs
+          assert attrs['maximum_normal_unit_length_error'] <= 1e-6, attrs
+          assert attrs['maximum_tangent_unit_length_error'] <= 1e-6, attrs
+          assert attrs['index_mismatch_count'] == 0, attrs
+          assert attrs['real_time_frame_pacing_claimed'] is False, attrs
+          assert attrs['interpolation_claimed'] is False, attrs
+          assert attrs['shaded_visual_quality_claimed'] is False, attrs
+          print(json.dumps(receipt, indent=2))
+          PY
+
+      - name: Upload exact bilateral tangent-motion evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: quadruped-bilateral-tangent-motion-godot-${{ env.EXACT_HEAD_SHA }}
+          path: |
+            animal/evidence/animation-bilateral-tangent-motion-001/bilateral_deformed_tangent_motion_receipt.json
+            animal/evidence/animation-bilateral-tangent-motion-001/bilateral_deformed_tangent_motion_frames.json
+            animal/evidence/animation-bilateral-tangent-motion-001/exact-head.txt
+            animal/tools/godot_animation_tangent_motion/generated/tangent_motion_payload.json
+            animal/tools/godot_animation_tangent_motion/generated/tangent_motion_payload_summary.json
+            animal/tools/godot_animation_tangent_motion/generated/tangent_motion_godot_receipt.json
+          if-no-files-found: error
+          retention-days: 30
+
+  python-313-compatibility:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out exact Animation lane head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          path: animal
+      - name: Check out exact deformed-tangent Rigging donor
+        uses: actions/checkout@v4
+        with:
+          repository: mike-axiom-mir/axm-animal-design
+          ref: 63c65d57fda0595217f86d971ff8c67f256188be
+          path: tangent-rigging
+      - name: Check out exact historical rig/profile donor
+        uses: actions/checkout@v4
+        with:
+          repository: mike-axiom-mir/axm-animal-design
+          ref: 04760112deb81a8d145226fe7ee02923107c9916
+          path: rig-donor
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Compile and preserve full inherited Animal tests
+        working-directory: animal
+        run: |
+          set -euo pipefail
+          python -m compileall -q src tests tools
+          python -m unittest discover -s tests -v
+      - name: Rebuild tangent-motion packet on Python 3.13
+        working-directory: animal
+        run: |
+          set -euo pipefail
+          python tools/build_bilateral_tangent_motion_godot_evidence.py \
+            --rigging-root ../tangent-rigging \
+            --rig-donor-root ../rig-donor \
+            --rigging-head 63c65d57fda0595217f86d971ff8c67f256188be \
+            --clip examples/quadruped_articulation_loop_001.json \
+            --out /tmp/tangent-motion-313 \
+            --payload-dir /tmp/tangent-motion-payload-313
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          receipt = json.loads(Path('/tmp/tangent-motion-313/bilateral_deformed_tangent_motion_receipt.json').read_text())
+          assert receipt['gate'] == 'PASS_BILATERAL_DEFORMED_TANGENT_41_SAMPLE_MOTION_BIND', receipt
+          assert receipt['observed']['total_authored_pose_frames_observed'] == 82, receipt
+          PY
