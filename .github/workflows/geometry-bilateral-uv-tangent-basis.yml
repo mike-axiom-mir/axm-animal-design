@@ -1,0 +1,87 @@
+name: Geometry bilateral UV tangent basis evidence
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  geometry-bilateral-uv-tangent-basis:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ['3.11', '3.13']
+    steps:
+      - name: Checkout exact Geometry head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          path: animal
+          fetch-depth: 0
+
+      - name: Prove exact dependency ancestry and module identities
+        working-directory: animal
+        run: |
+          git merge-base --is-ancestor 91e2fd01be63df807c035b39f7ec824a4a5a60b8 HEAD
+          git merge-base --is-ancestor 79e1667f6cc91e2ec8e41f01df18b6933c9c876d HEAD
+          git merge-base --is-ancestor a2cd0a6135a7c8502aef9572f7079a3dd2632103 HEAD
+          git merge-base --is-ancestor bdbb51303bd1b96866b06a71730ccc328bf4f2f6 HEAD
+          test "$(git hash-object src/axm_animal_design/bilateral_logical_quad_normals.py)" = "14a1ba3a1e4c96270197f4f449505113f7bf3e6e"
+          test "$(git hash-object src/axm_animal_design/bilateral_mirror_surface_topology.py)" = "9a0ebcc6169445996756bb446a87e3baf8b9cc33"
+
+      - name: Checkout exact Rigging plan and weighting-profile donor
+        uses: actions/checkout@v4
+        with:
+          repository: mike-axiom-mir/axm-animal-design
+          ref: 04760112deb81a8d145226fe7ee02923107c9916
+          path: rig-donor
+
+      - name: Verify exact Rigging donor checkout
+        run: test "$(git -C rig-donor rev-parse HEAD)" = "04760112deb81a8d145226fe7ee02923107c9916"
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Compile
+        working-directory: animal
+        run: python -m compileall -q src tests tools
+
+      - name: Run full inherited Animal suite plus UV tangent tests
+        working-directory: animal
+        env:
+          PYTHONPATH: src
+          AXM_RIG_PLAN: ../rig-donor/examples/quadruped_rig_probe_001.json
+          AXM_WEIGHTING_PROFILE: ../rig-donor/examples/quadruped_weighting_refinement_001.json
+        run: python -m unittest discover -s tests -v
+
+      - name: Build exact bilateral UV tangent evidence
+        if: matrix.python-version == '3.11'
+        working-directory: animal
+        env:
+          PYTHONPATH: src
+        run: |
+          rm -rf evidence/geometry-bilateral-uv-tangent-basis-001
+          mkdir -p evidence/geometry-bilateral-uv-tangent-basis-001
+          python tools/build_bilateral_uv_tangent_basis_evidence.py \
+            --source examples/quadruped_neutral_001.json \
+            --left-profile examples/quadruped_elbow_source_successor_003.json \
+            --bilateral-profile examples/quadruped_elbow_bilateral_successor_003.json \
+            --parent-head 91e2fd01be63df807c035b39f7ec824a4a5a60b8 \
+            --normal-head 79e1667f6cc91e2ec8e41f01df18b6933c9c876d \
+            --materials-head a2cd0a6135a7c8502aef9572f7079a3dd2632103 \
+            --topology-head bdbb51303bd1b96866b06a71730ccc328bf4f2f6 \
+            --normal-module-blob 14a1ba3a1e4c96270197f4f449505113f7bf3e6e \
+            --topology-module-blob 9a0ebcc6169445996756bb446a87e3baf8b9cc33 \
+            --exact-head "$(git rev-parse HEAD)" \
+            --out-dir evidence/geometry-bilateral-uv-tangent-basis-001
+          grep -q 'PASS_BILATERAL_UV_TANGENT_BASIS_CANDIDATE__FINAL_UV_VISUAL_TRANSPORT_HELD' \
+            evidence/geometry-bilateral-uv-tangent-basis-001/geometry-uv-tangent-evidence.json
+
+      - name: Upload exact Geometry UV tangent evidence
+        if: ${{ always() && matrix.python-version == '3.11' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: animal-geometry-bilateral-uv-tangent-basis-${{ github.event.pull_request.head.sha || github.sha }}
+          path: animal/evidence/geometry-bilateral-uv-tangent-basis-001
+          if-no-files-found: error
+          retention-days: 30
