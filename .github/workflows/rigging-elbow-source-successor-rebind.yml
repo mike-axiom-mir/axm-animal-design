@@ -1,0 +1,122 @@
+name: Rigging elbow source-successor rebind evidence
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  source-successor-rigging-rebind:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ['3.11', '3.13']
+    steps:
+      - name: Checkout exact successor Rigging head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+          path: animal
+
+      - name: Prove exact Geometry and Organic ancestry
+        working-directory: animal
+        run: |
+          git merge-base --is-ancestor eb5ce99798b646b6ab9705c0c914b898173f7cc1 HEAD
+          git merge-base --is-ancestor 7314a8971abb53f8ee6ef226c2496ab6d5da20d7 HEAD
+          test "$(git rev-parse HEAD)" = "${{ github.event.pull_request.head.sha || github.sha }}"
+
+      - name: Checkout exact historical connected-weighting evidence donor
+        uses: actions/checkout@v4
+        with:
+          repository: mike-axiom-mir/axm-animal-design
+          ref: 5625c9f796a75e8b441458c51093e55519490611
+          path: weighting-donor
+
+      - name: Checkout exact historical Rigging plan/profile donor
+        uses: actions/checkout@v4
+        with:
+          repository: mike-axiom-mir/axm-animal-design
+          ref: 04760112deb81a8d145226fe7ee02923107c9916
+          path: rig-donor
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Compile current branch
+        working-directory: animal
+        run: python -m compileall -q src tests tools
+
+      - name: Run full inherited Animal test suite
+        working-directory: animal
+        env:
+          AXM_RIG_PLAN: ../rig-donor/examples/quadruped_rig_probe_001.json
+        run: python -m unittest discover -s tests -v
+
+      - name: Reproduce historical connected weighting donor
+        if: matrix.python-version == '3.11'
+        working-directory: weighting-donor
+        env:
+          PYTHONPATH: src
+        run: |
+          python tools/build_connected_weighting_refinement_evidence.py \
+            --source examples/quadruped_neutral_001.json \
+            --rig-plan ../rig-donor/examples/quadruped_rig_probe_001.json \
+            --weighting-profile ../rig-donor/examples/quadruped_weighting_refinement_001.json \
+            --rig-donor-head 04760112deb81a8d145226fe7ee02923107c9916 \
+            --out ../historical-weighting-evidence
+          grep -q 'PASS_CONNECTED_TOPOLOGY_WEIGHTING_REFINEMENT' \
+            ../historical-weighting-evidence/connected-weighting-refinement-receipt.json
+
+      - name: Reject wrong historical weighting identity
+        if: matrix.python-version == '3.11'
+        working-directory: animal
+        env:
+          PYTHONPATH: src
+        run: |
+          if python tools/build_elbow_source_successor_rigging_rebind_evidence.py \
+            --source examples/quadruped_neutral_001.json \
+            --source-profile examples/quadruped_elbow_source_successor_003.json \
+            --rig-plan ../rig-donor/examples/quadruped_rig_probe_001.json \
+            --weighting-profile ../rig-donor/examples/quadruped_weighting_refinement_001.json \
+            --geometry-head eb5ce99798b646b6ab9705c0c914b898173f7cc1 \
+            --historical-weighting-head 0000000000000000000000000000000000000000 \
+            --rig-donor-head 04760112deb81a8d145226fe7ee02923107c9916 \
+            --out evidence/negative-elbow-source-successor-rigging; then
+            echo "wrong historical weighting identity unexpectedly passed"
+            exit 1
+          fi
+          rm -rf evidence/negative-elbow-source-successor-rigging
+
+      - name: Build exact source-successor Rigging rebind evidence
+        if: matrix.python-version == '3.11'
+        working-directory: animal
+        env:
+          PYTHONPATH: src
+        run: |
+          python tools/build_elbow_source_successor_rigging_rebind_evidence.py \
+            --source examples/quadruped_neutral_001.json \
+            --source-profile examples/quadruped_elbow_source_successor_003.json \
+            --rig-plan ../rig-donor/examples/quadruped_rig_probe_001.json \
+            --weighting-profile ../rig-donor/examples/quadruped_weighting_refinement_001.json \
+            --geometry-head eb5ce99798b646b6ab9705c0c914b898173f7cc1 \
+            --historical-weighting-head 5625c9f796a75e8b441458c51093e55519490611 \
+            --rig-donor-head 04760112deb81a8d145226fe7ee02923107c9916 \
+            --out evidence/rigging-elbow-source-successor-rebind-001
+
+          grep -q 'PASS_SOURCE_SUCCESSOR_RIGGING_REBIND_DENSE_SWEEP' \
+            evidence/rigging-elbow-source-successor-rebind-001/source-successor-rigging-rebind-receipt.json
+          git rev-parse HEAD > evidence/rigging-elbow-source-successor-rebind-001/exact-head.txt
+          printf '%s\n' 'eb5ce99798b646b6ab9705c0c914b898173f7cc1' > evidence/rigging-elbow-source-successor-rebind-001/geometry-head.txt
+          printf '%s\n' '7314a8971abb53f8ee6ef226c2496ab6d5da20d7' > evidence/rigging-elbow-source-successor-rebind-001/organic-head.txt
+          printf '%s\n' '5625c9f796a75e8b441458c51093e55519490611' > evidence/rigging-elbow-source-successor-rebind-001/historical-weighting-head.txt
+          printf '%s\n' '04760112deb81a8d145226fe7ee02923107c9916' > evidence/rigging-elbow-source-successor-rebind-001/rig-donor-head.txt
+
+      - name: Upload exact Rigging evidence
+        if: ${{ always() && matrix.python-version == '3.11' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: animal-elbow-source-successor-rigging-rebind-${{ github.event.pull_request.head.sha || github.sha }}
+          path: animal/evidence/rigging-elbow-source-successor-rebind-001
+          if-no-files-found: error
+          retention-days: 30
