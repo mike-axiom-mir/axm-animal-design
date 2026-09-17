@@ -58,8 +58,8 @@ def main() -> int:
     observed = {
         "technical_art_head": args.technical_art_head,
         "technical_art_module_blob": args.technical_art_module_blob,
-        "technical_art_artifact_id": args.technical_artifact_id,
-        "technical_art_artifact_sha256": args.technical_artifact_sha256,
+        "technical_art_artifact_id": args.technical_art_artifact_id,
+        "technical_art_artifact_sha256": args.technical_art_artifact_sha256,
     }
     if observed != expected:
         raise SystemExit(f"exact Technical Art dependency identity drift: {observed!r} != {expected!r}")
