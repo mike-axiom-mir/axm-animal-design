@@ -5,6 +5,8 @@ on:
     paths:
       - "tools/godot_runtime_direction_frame_dynamic_region_probe.gd"
       - "tools/verify_runtime_direction_frame_dynamic_region.py"
+      - "tools/godot_runtime_direction_frame_dynamic_region_probe_v2.gd"
+      - "tools/verify_runtime_direction_frame_dynamic_region_v2.py"
       - "docs/runtime_direction_frame_dynamic_region.md"
       - ".github/workflows/runtime-animal-direction-frame-dynamic-region.yml"
   workflow_dispatch:
@@ -83,6 +85,18 @@ jobs:
           grep -R -q 'PASS_CURRENT_UC_RIGGED_RECEIVER_DEPENDENCY_CLOSURE_IDENTICAL_TO_TESTED_RECEIVER' "$RUNNER_TEMP/uc-closure"
           grep -R -q '452b179cccff8acdde8930f7bde8662e52f86949' "$RUNNER_TEMP/uc-closure"
 
+      - name: Preserve failed manual-packing predecessor exactly
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh api repos/mike-axiom-mir/axm-animal-design/actions/artifacts/10516719596/zip > "$RUNNER_TEMP/failed-manual-packing.zip"
+          echo "a00a9af5192bc7c923e1f4a1891faa7880a3c47eec263d82c1e04e664eaf7413  $RUNNER_TEMP/failed-manual-packing.zip" | sha256sum -c -
+          mkdir -p "$RUNNER_TEMP/failed-manual-packing"
+          unzip -q "$RUNNER_TEMP/failed-manual-packing.zip" -d "$RUNNER_TEMP/failed-manual-packing"
+          grep -q 'HOLD_ANIMAL_GODOT_DYNAMIC_VERTEX_DIRECTION_REGION_UPDATE' "$RUNNER_TEMP/failed-manual-packing/runtime-dynamic-region-result.json"
+
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
@@ -92,7 +106,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python -m py_compile tools/verify_runtime_direction_frame_dynamic_region.py
+          python -m py_compile tools/verify_runtime_direction_frame_dynamic_region_v2.py
 
       - name: Setup exact Godot proof host
         uses: chickensoft-games/setup-godot@v2
@@ -105,25 +119,25 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p animal-runtime/evidence/runtime-animal-direction-frame-dynamic-region-001
+          mkdir -p animal-runtime/evidence/runtime-animal-direction-frame-dynamic-region-002
           godot --headless \
             --script animal-ta-current/tools/godot_direction_frame_target_host_probe.gd -- \
             --payload "$TA_PACKET" \
-            --out "$GITHUB_WORKSPACE/animal-runtime/evidence/runtime-animal-direction-frame-dynamic-region-001/current-ta-baseline-receipt.json"
+            --out "$GITHUB_WORKSPACE/animal-runtime/evidence/runtime-animal-direction-frame-dynamic-region-002/current-ta-baseline-receipt.json"
           grep -q 'PASS_TECHNICAL_ART_GODOT_ARRAYMESH_OWNER_RECONSTRUCTED_FRAME_41_KEYS_RIGHT' \
-            animal-runtime/evidence/runtime-animal-direction-frame-dynamic-region-001/current-ta-baseline-receipt.json
+            animal-runtime/evidence/runtime-animal-direction-frame-dynamic-region-002/current-ta-baseline-receipt.json
 
-      - name: Measure persistent surface dynamic vertex and direction regions
+      - name: Measure engine-packed persistent vertex region
         working-directory: animal-runtime
         shell: bash
         run: |
           set -euo pipefail
           godot --headless \
-            --script tools/godot_runtime_direction_frame_dynamic_region_probe.gd -- \
+            --script tools/godot_runtime_direction_frame_dynamic_region_probe_v2.gd -- \
             --payload "$TA_PACKET" \
-            --out "$(pwd)/evidence/runtime-animal-direction-frame-dynamic-region-001/runtime-dynamic-region-result.json"
-          python tools/verify_runtime_direction_frame_dynamic_region.py \
-            evidence/runtime-animal-direction-frame-dynamic-region-001/runtime-dynamic-region-result.json
+            --out "$(pwd)/evidence/runtime-animal-direction-frame-dynamic-region-002/runtime-engine-packed-region-result.json"
+          python tools/verify_runtime_direction_frame_dynamic_region_v2.py \
+            evidence/runtime-animal-direction-frame-dynamic-region-002/runtime-engine-packed-region-result.json
 
       - name: Fail closed if surface rebuilding is relabelled back in
         working-directory: animal-runtime
@@ -133,13 +147,13 @@ jobs:
           python - <<'PY'
           import json
           from pathlib import Path
-          source = Path('evidence/runtime-animal-direction-frame-dynamic-region-001/runtime-dynamic-region-result.json')
+          source = Path('evidence/runtime-animal-direction-frame-dynamic-region-002/runtime-engine-packed-region-result.json')
           mutated = json.loads(source.read_text(encoding='utf-8'))
           mutated['after']['surface_rebuilds_per_41_key_playback'] = 41
-          out = Path('/tmp/runtime-dynamic-region-mutated.json')
+          out = Path('/tmp/runtime-dynamic-region-v2-mutated.json')
           out.write_text(json.dumps(mutated, indent=2, sort_keys=True) + '\n', encoding='utf-8')
           PY
-          if python tools/verify_runtime_direction_frame_dynamic_region.py /tmp/runtime-dynamic-region-mutated.json; then
+          if python tools/verify_runtime_direction_frame_dynamic_region_v2.py /tmp/runtime-dynamic-region-v2-mutated.json; then
             echo 'mutated surface-rebuild count unexpectedly passed' >&2
             exit 1
           fi
@@ -149,7 +163,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          ROOT=evidence/runtime-animal-direction-frame-dynamic-region-001
+          ROOT=evidence/runtime-animal-direction-frame-dynamic-region-002
           printf '%s\n' "$RUNTIME_HEAD" > "$ROOT/exact-runtime-head.txt"
           printf '%s\n' '9db88b7629df025be1c157c19ca258e3ff0ce483' > "$ROOT/pass40-runtime-head.txt"
           printf '%s\n' '1ca28d29c7e1aaa095c11aaa6085716669230cb3' > "$ROOT/exact-current-technical-art-head.txt"
@@ -160,48 +174,54 @@ jobs:
           printf '%s\n' '10514528544' > "$ROOT/exact-current-uc-dependency-closure-artifact.txt"
           printf '%s\n' '8b7d65539251f2ac3b8c35c125916438072383befeae0564565fdc1a3edf20f9' > "$ROOT/exact-current-uc-dependency-closure-artifact-sha256.txt"
           printf '%s\n' '452b179cccff8acdde8930f7bde8662e52f86949' > "$ROOT/current-uc-head-proven-by-closure.txt"
+          printf '%s\n' 'fbc9c8a86daa299c6a3bf2b9aa421cf30b01df41' > "$ROOT/failed-manual-packing-runtime-head.txt"
+          printf '%s\n' '35267861278' > "$ROOT/failed-manual-packing-workflow.txt"
+          printf '%s\n' '10516719596' > "$ROOT/failed-manual-packing-artifact.txt"
+          printf '%s\n' 'a00a9af5192bc7c923e1f4a1891faa7880a3c47eec263d82c1e04e664eaf7413' > "$ROOT/failed-manual-packing-artifact-sha256.txt"
           cp "$TA_RECEIPT" "$ROOT/exact-current-technical-art-target-host-receipt.json"
           cp "$TA_PACKET" "$ROOT/exact-current-technical-art-target-host-packet.json"
+          cp "$RUNNER_TEMP/failed-manual-packing/runtime-dynamic-region-result.json" "$ROOT/failed-manual-packing-result.json"
           cp -R "$RUNNER_TEMP/uc-closure" "$ROOT/current-uc-receiver-dependency-closure"
           python - <<'PY'
           import json
           from pathlib import Path
-          root = Path('evidence/runtime-animal-direction-frame-dynamic-region-001')
-          result = json.loads((root / 'runtime-dynamic-region-result.json').read_text(encoding='utf-8'))
+          root = Path('evidence/runtime-animal-direction-frame-dynamic-region-002')
+          result = json.loads((root / 'runtime-engine-packed-region-result.json').read_text(encoding='utf-8'))
           summary = {
               'state': result['state'],
-              'surface_constructions_before': result['before']['surface_constructions_to_establish_41_key_receiver'],
-              'surface_constructions_after': result['after']['surface_constructions_to_establish_41_key_receiver'],
-              'surface_rebuilds_per_playback_before': result['before']['surface_rebuilds_per_41_key_playback'],
-              'surface_rebuilds_per_playback_after': result['after']['surface_rebuilds_per_41_key_playback'],
+              'surface_rebuilds_before': result['before']['surface_rebuilds_per_41_key_playback'],
+              'surface_rebuilds_after': result['after']['surface_rebuilds_per_41_key_playback'],
+              'surface_rebuild_reduction_percent': result['after']['surface_rebuild_reduction_percent'],
               'surface_construction_reduction_percent': result['after']['surface_construction_reduction_percent'],
+              'vertex_region_updates_per_playback': result['after']['vertex_region_updates_per_41_key_playback'],
+              'raw_vertex_bytes_per_key': result['engine_packed_vertex_cache']['raw_vertex_bytes_per_key'],
+              'cached_raw_vertex_bytes_all_41_keys': result['engine_packed_vertex_cache']['cached_raw_vertex_bytes_all_41_keys'],
               'baseline_median_sweep_us': result['proof_host_timing']['baseline_median_sweep_us'],
               'candidate_median_sweep_us': result['proof_host_timing']['candidate_median_sweep_us'],
               'median_delta_percent': result['proof_host_timing']['median_delta_percent'],
               'baseline_p95_sweep_us': result['proof_host_timing']['baseline_p95_sweep_us'],
               'candidate_p95_sweep_us': result['proof_host_timing']['candidate_p95_sweep_us'],
               'p95_delta_percent': result['proof_host_timing']['p95_delta_percent'],
-              'dynamic_region_bytes_per_41_key_playback': result['buffer_layout']['dynamic_region_bytes_per_41_key_playback'],
-              'cached_dynamic_payload_bytes': result['buffer_layout']['cached_dynamic_payload_bytes'],
               'envelope_vs_median_frame_volume_ratio': result['motion_envelope']['envelope_vs_median_frame_volume_ratio'],
+              'candidate_vs_baseline_exact': result['readback']['candidate_vs_baseline_exact'],
               'visual_tradeoff': result['visual_tradeoff'],
           }
           (root / 'summary.json').write_text(json.dumps(summary, indent=2, sort_keys=True) + '\n', encoding='utf-8')
           PY
           cat > "$ROOT/README.txt" <<'EOF'
-          Runtime / Optimization bounded Animal target-host evidence.
-          This successor starts from the already-proven one-ArrayMesh lifecycle path and asks whether fixed-topology playback can keep one persistent surface while changing only POSITION plus NORMAL/TANGENT vertex-buffer regions.
-          The exact current Technical Art target-host artifact is re-proved first. Current UC executable receiver continuity is separately bound by Technical Art's retained dependency-closure artifact; UC product code is not modified here.
-          Acceptance requires all 41 dynamic-region candidate readbacks to remain exact-array identical to the surface-rebuild baseline, a full-motion custom AABB, zero UV/index updates, one persistent surface, and a proof-host median submission improvement.
-          Proof-host timing is not target-device evidence. No fresh shaded render is claimed. The conservative full-motion AABB can reduce culling tightness and is retained as an explicit Art/Runtime tradeoff.
-          Bilateral receiving, continuous playback, target-device CPU/GPU/FPS/VRAM/thermal/battery, Art Direction acceptance, independent Visual QA acceptance, CANON and production readiness remain HOLD.
+          Runtime / Optimization bounded Animal persistent-surface evidence.
+          This starts from pass 40: one persistent ArrayMesh but 41 full surface rebuilds per exact 41-key playback.
+          The successful candidate is allowed to use only Godot's own engine-packed vertex_data captured from that verified surface-rebuild baseline. It does not reimplement private target-host packing. One persistent dynamic surface receives one vertex-buffer region update per key; UV and index buffers remain untouched.
+          Acceptance requires exact candidate-vs-baseline receiver-array identity across all 41 keys, the same current Technical Art target-host packet, current UC receiver dependency continuity, a conservative full-motion AABB, and a proof-host median win.
+          The failed manual-packing predecessor is retained unchanged and remains HOLD evidence rather than silently rewritten.
+          Proof-host timing excludes payload preparation and is not target-device evidence. Fresh shaded A/B, bilateral receiving, continuous playback, target-device CPU/GPU/FPS/VRAM/thermal/battery, Art Direction acceptance, independent Visual QA acceptance, CANON and production readiness remain HOLD.
           EOF
 
       - name: Upload exact Runtime dynamic-region evidence
         if: ${{ always() }}
         uses: actions/upload-artifact@v4
         with:
-          name: animal-runtime-direction-frame-dynamic-region-${{ github.event.pull_request.head.sha || github.sha }}
-          path: animal-runtime/evidence/runtime-animal-direction-frame-dynamic-region-001
+          name: animal-runtime-direction-frame-dynamic-region-v2-${{ github.event.pull_request.head.sha || github.sha }}
+          path: animal-runtime/evidence/runtime-animal-direction-frame-dynamic-region-002
           if-no-files-found: warn
           retention-days: 30
