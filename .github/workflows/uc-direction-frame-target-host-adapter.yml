@@ -1,0 +1,186 @@
+name: UC direction-frame target-host adapter evidence
+
+on:
+  pull_request:
+    paths:
+      - "src/axm_animal_design/uc_direction_frame_target_host_adapter.py"
+      - "tools/build_uc_direction_frame_target_host_adapter_evidence.py"
+      - "tools/godot_direction_frame_target_host_probe.gd"
+      - "tests/test_uc_direction_frame_target_host_adapter.py"
+      - ".github/workflows/uc-direction-frame-target-host-adapter.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  exact-owner-reconstruction-to-real-godot-arraymesh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout exact Technical Art head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          path: animal-ta
+          fetch-depth: 0
+
+      - name: Bind exact Technical Art lineage
+        shell: bash
+        run: |
+          set -euo pipefail
+          TA_HEAD="$(git -C animal-ta rev-parse HEAD)"
+          echo "TA_HEAD=${TA_HEAD}" >> "$GITHUB_ENV"
+          if [ -n "${{ github.event.pull_request.head.sha }}" ]; then
+            test "$TA_HEAD" = "${{ github.event.pull_request.head.sha }}"
+          else
+            test "$TA_HEAD" = "$GITHUB_SHA"
+          fi
+          git -C animal-ta merge-base --is-ancestor a3c062f1271e72598971446b37847598d2433d93 HEAD
+
+      - name: Checkout exact Rigging owner reconstruction code
+        uses: actions/checkout@v4
+        with:
+          repository: mike-axiom-mir/axm-animal-design
+          ref: 81ab44eab2e13bed95187610a476be2b2c4667a7
+          path: rigging-owner
+          fetch-depth: 1
+
+      - name: Verify exact Rigging owner implementation identities
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C rigging-owner rev-parse HEAD)" = "81ab44eab2e13bed95187610a476be2b2c4667a7"
+          test "$(git -C rigging-owner hash-object src/axm_animal_design/transported_frame_reconstruction_constraint.py)" = "c9916c62e2081922b8eb7ec0b3cd1c25c019b2f6"
+          test "$(git -C rigging-owner hash-object src/axm_animal_design/transported_tangent_deformation_audit.py)" = "42f31fc5cb95426e89d22b5ed6c2b0983a22326d"
+          test "$(git -C rigging-owner hash-object src/axm_animal_design/bilateral_deformed_tangent_frames.py)" = "fbade964b3305d70775d196232ad2cd4671d0eac"
+          test "$(git -C rigging-owner hash-object src/axm_animal_design/bilateral_uv_tangent_basis.py)" = "ba0b4e620f132413606177358e47bd32ae4d4965"
+
+      - name: Download exact predecessor Technical Art adoption contract
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/adoption"
+          gh api repos/mike-axiom-mir/axm-animal-design/actions/artifacts/10506183243/zip > "$RUNNER_TEMP/adoption.zip"
+          echo "58d4f4f35bccdcc24deb4eb624279070cc9eb52d54c97b2fba6ff4cbe7da1973  $RUNNER_TEMP/adoption.zip" | sha256sum -c -
+          unzip -q "$RUNNER_TEMP/adoption.zip" -d "$RUNNER_TEMP/adoption"
+          ADOPTION_RECEIPT="$(find "$RUNNER_TEMP/adoption" -name 'uc_direction_frame_reconstruction_contract_evidence.json' -print -quit)"
+          test -n "$ADOPTION_RECEIPT"
+          grep -q 'PASS_POST_SKIN_OWNER_FRAME_RECONSTRUCTION_CONTRACT_ADOPTED__HOLD_TARGET_RUNTIME_IMPLEMENTATION' "$ADOPTION_RECEIPT"
+          grep -q '"animal_domain_policy_moved_into_uc": false' "$ADOPTION_RECEIPT"
+          echo "ADOPTION_RECEIPT=$ADOPTION_RECEIPT" >> "$GITHUB_ENV"
+
+      - name: Download exact source Technical Art rigged tangent transport
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/source-ta"
+          gh api repos/mike-axiom-mir/axm-animal-design/actions/artifacts/10474385703/zip > "$RUNNER_TEMP/source-ta.zip"
+          echo "7fc2a7f5d745da593e8762efa98e13661f84a057b1eb60921d576c366e71d7bb  $RUNNER_TEMP/source-ta.zip" | sha256sum -c -
+          unzip -q "$RUNNER_TEMP/source-ta.zip" -d "$RUNNER_TEMP/source-ta"
+          SOURCE_GLB="$(find "$RUNNER_TEMP/source-ta" -name 'animal_selected003_right_mirror_rigged_uv_tangent_41key.glb' -print -quit)"
+          SOURCE_RECEIPT="$(find "$RUNNER_TEMP/source-ta" -name 'uc_rigged_uv_tangent_transport_receipt.json' -print -quit)"
+          test -n "$SOURCE_GLB"
+          test -n "$SOURCE_RECEIPT"
+          test "$(sha256sum "$SOURCE_GLB" | awk '{print $1}')" = "ecb122e3274929c3d99bc8e29a472aaa2657bcb16b13331a4f1972bb6ec6b493"
+          echo "SOURCE_GLB=$SOURCE_GLB" >> "$GITHUB_ENV"
+          echo "SOURCE_RECEIPT=$SOURCE_RECEIPT" >> "$GITHUB_ENV"
+
+      - name: Checkout current Universal Creation generic receiver pin
+        uses: actions/checkout@v4
+        with:
+          repository: mike-axiom-mir/axm-universal-creation
+          ref: aa53ee8aa803c19524b7edbef6250bf6ed9336c0
+          path: uc-current
+          fetch-depth: 1
+
+      - name: Bind current Universal Creation identity without modifying it
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C uc-current rev-parse HEAD)" = "aa53ee8aa803c19524b7edbef6250bf6ed9336c0"
+          test "$(git -C uc-current hash-object capabilities/platform-hands/shared/asset-hands/rigged-gltf-codec.js)" = "02b69b6c7368ba6e34f226ca545293d26d208922"
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Preserve Technical Art receiving suite
+        working-directory: animal-ta
+        run: |
+          python -m compileall -q src tests tools
+          PYTHONPATH=src python -m unittest discover -s tests -v
+
+      - name: Build exact all-key owner-reconstructed target-host packet
+        working-directory: animal-ta
+        env:
+          PYTHONPATH: src
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf evidence/uc_direction_frame_target_host_adapter
+          python tools/build_uc_direction_frame_target_host_adapter_evidence.py \
+            --contract-receipt "$ADOPTION_RECEIPT" \
+            --rigging-root "$GITHUB_WORKSPACE/rigging-owner" \
+            --source-glb "$SOURCE_GLB" \
+            --technical-art-head "$TA_HEAD" \
+            --uc-root "$GITHUB_WORKSPACE/uc-current" \
+            --uc-head aa53ee8aa803c19524b7edbef6250bf6ed9336c0 \
+            --uc-codec-blob 02b69b6c7368ba6e34f226ca545293d26d208922 \
+            --out evidence/uc_direction_frame_target_host_adapter
+          grep -q 'PASS_OWNER_RECONSTRUCTION_TO_TECHNICAL_ART_TARGET_HOST_PACKET_READY' \
+            evidence/uc_direction_frame_target_host_adapter/technical-art-target-host-build-receipt.json
+          grep -q 'READY_TECHNICAL_ART_TARGET_HOST_REFERENCE_IMPLEMENTATION__HOLD_RUNTIME_PRODUCT_IMPLEMENTATION' \
+            evidence/uc_direction_frame_target_host_adapter/technical-art-target-host-packet.json
+          grep -q '"runtime_product_implementation_established": false' \
+            evidence/uc_direction_frame_target_host_adapter/technical-art-target-host-packet.json
+          test "$(cat evidence/uc_direction_frame_target_host_adapter/technical-art-head.txt)" = "$TA_HEAD"
+          cp "$ADOPTION_RECEIPT" evidence/uc_direction_frame_target_host_adapter/exact-predecessor-adoption-contract.json
+          cp "$SOURCE_RECEIPT" evidence/uc_direction_frame_target_host_adapter/exact-source-transport-receipt.json
+          cp "$SOURCE_GLB" evidence/uc_direction_frame_target_host_adapter/animal_selected003_right_mirror_rigged_uv_tangent_41key.glb
+
+      - name: Setup Godot reference target host
+        uses: chickensoft-games/setup-godot@v2
+        with:
+          version: 4.7.2
+          use-dotnet: false
+          include-templates: false
+
+      - name: Apply all 41 reconstructed frames to real Godot ArrayMesh and read back
+        working-directory: animal-ta
+        shell: bash
+        run: |
+          set -euo pipefail
+          godot --headless \
+            --script tools/godot_direction_frame_target_host_probe.gd -- \
+            --payload "$(pwd)/evidence/uc_direction_frame_target_host_adapter/technical-art-target-host-packet.json" \
+            --out "$(pwd)/evidence/uc_direction_frame_target_host_adapter/godot-arraymesh-target-host-receipt.json"
+          grep -q 'PASS_TECHNICAL_ART_GODOT_ARRAYMESH_OWNER_RECONSTRUCTED_FRAME_41_KEYS_RIGHT' \
+            evidence/uc_direction_frame_target_host_adapter/godot-arraymesh-target-host-receipt.json
+          grep -q '"runtime_product_implementation_established": false' \
+            evidence/uc_direction_frame_target_host_adapter/godot-arraymesh-target-host-receipt.json
+
+      - name: Retain bounded truth boundary
+        working-directory: animal-ta
+        shell: bash
+        run: |
+          cat > evidence/uc_direction_frame_target_host_adapter/README.txt <<'EOF'
+          Technical Art / UC Integration reference target-host evidence only.
+          Exact right-side 41-key post-skin POSITION transport is reconstructed through the pinned Rigging/Geometry owner algorithm, mapped through the established Animal -> UC target boundary, accepted by current UC's unchanged generic rigged GLB receiver, then applied to real Godot 4.7.2 ArrayMesh surfaces and read back.
+          This does not move Animal reconstruction logic into UC or Technical Art. It does not prove bilateral target-host equivalence, interpolated shaded playback, Runtime/product implementation, device performance, final production normal-map quality, Art/QA acceptance, CANON, or production readiness.
+          The historical static transported NORMAL/TANGENT deformation mismatch remains HOLD.
+          EOF
+
+      - name: Upload exact target-host adapter evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: animal-direction-frame-target-host-adapter-${{ github.event.pull_request.head.sha || github.sha }}
+          path: animal-ta/evidence/uc_direction_frame_target_host_adapter
+          if-no-files-found: warn
+          retention-days: 30

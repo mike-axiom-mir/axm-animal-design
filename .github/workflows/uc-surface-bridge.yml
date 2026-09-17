@@ -1,0 +1,278 @@
+name: UC surface bridge evidence
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  exact-cross-repo-bridge:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout animal-design candidate
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Checkout pinned Universal Creation
+        uses: actions/checkout@v4
+        with:
+          repository: mike-axiom-mir/axm-universal-creation
+          ref: 640bd7dc177b90e023aad879b4c00051df7f4ee3
+          path: .uc
+      - name: Compile bridge sources
+        run: python -m compileall -q src tests tools
+      - name: Run bridge unit tests
+        run: PYTHONPATH=src python -m unittest discover -s tests -p 'test_uc_bridge.py' -v
+      - name: Build exact animal -> UC -> GLB evidence
+        env:
+          AXM_UC_COMMIT: 640bd7dc177b90e023aad879b4c00051df7f4ee3
+        run: PYTHONPATH=src:.uc/src python tools/build_uc_bridge_evidence.py
+      - name: Upload exact bridge evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: quadruped-uc-surface-bridge-evidence
+          path: |
+            evidence/quadruped_uc_surface_001.json
+            evidence/quadruped_uc_bridge_001.glb
+            evidence/quadruped_uc_bridge_001.evidence.json
+          if-no-files-found: error
+
+  connected-topology-current-uc-bridge:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout exact Technical Art head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Checkout exact Animal Geometry producer
+        uses: actions/checkout@v4
+        with:
+          repository: mike-axiom-mir/axm-animal-design
+          ref: feb4b24cd36bcc879173138d240754f71db34834
+          path: .animal-geometry
+      - name: Checkout pinned current Universal Creation
+        uses: actions/checkout@v4
+        with:
+          repository: mike-axiom-mir/axm-universal-creation
+          ref: 9a4ab8156772536526dd75bb2acab81e9b88f517
+          path: .uc-current
+      - name: Compile Technical Art bridge sources
+        run: python -m compileall -q src tests tools
+      - name: Run Technical Art bridge unit tests
+        run: PYTHONPATH=src python -m unittest discover -s tests -p 'test_uc_bridge.py' -v
+      - name: Build exact connected Geometry -> current UC -> GLB evidence
+        env:
+          AXM_ANIMAL_GEOMETRY_COMMIT: feb4b24cd36bcc879173138d240754f71db34834
+          AXM_ANIMAL_GEOMETRY_CHECKOUT: .animal-geometry
+          AXM_UC_COMMIT: 9a4ab8156772536526dd75bb2acab81e9b88f517
+        run: PYTHONPATH=src:.uc-current/src python tools/build_uc_connected_topology_bridge_evidence.py
+      - name: Retain exact checkout identities
+        run: |
+          git rev-parse HEAD > evidence/uc_connected_topology/technical-art-head.txt
+          git -C .animal-geometry rev-parse HEAD > evidence/uc_connected_topology/geometry-head.txt
+          git -C .uc-current rev-parse HEAD > evidence/uc_connected_topology/uc-head.txt
+      - name: Upload connected topology bridge evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: quadruped-connected-topology-uc-bridge-evidence
+          path: evidence/uc_connected_topology/
+          if-no-files-found: error
+
+  animal-animation-current-uc-clock-bridge:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout exact Technical Art head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Checkout exact Animal Animation producer
+        uses: actions/checkout@v4
+        with:
+          repository: mike-axiom-mir/axm-animal-design
+          ref: b10ec5aeeb02b5df8d42e13df2772f4dcaae9a3a
+          path: .animal-animation
+      - name: Checkout previous proven Universal Creation runtime pin
+        uses: actions/checkout@v4
+        with:
+          repository: mike-axiom-mir/axm-universal-creation
+          ref: a05f5fb083ad1454a0d92d001e0d3994a779826f
+          path: .uc-animation-runtime-previous
+      - name: Checkout current Universal Creation
+        uses: actions/checkout@v4
+        with:
+          repository: mike-axiom-mir/axm-universal-creation
+          ref: bd51542bc68534a6e6f3a11d421dc70216b2abf9
+          path: .uc-animation-runtime
+      - name: Compile Technical Art animation bridge
+        run: python -m compileall -q tools/build_uc_animation_clock_bridge_evidence.py
+      - name: Build exact Animal sampled playback -> current UC runtime clock evidence
+        env:
+          AXM_ANIMAL_ANIMATION_COMMIT: b10ec5aeeb02b5df8d42e13df2772f4dcaae9a3a
+          AXM_ANIMAL_ANIMATION_CHECKOUT: .animal-animation
+          AXM_PREVIOUS_UC_COMMIT: a05f5fb083ad1454a0d92d001e0d3994a779826f
+          AXM_PREVIOUS_UC_CHECKOUT: .uc-animation-runtime-previous
+          AXM_UC_COMMIT: bd51542bc68534a6e6f3a11d421dc70216b2abf9
+          AXM_UC_CHECKOUT: .uc-animation-runtime
+        run: PYTHONPATH=.uc-animation-runtime/src python tools/build_uc_animation_clock_bridge_evidence.py
+      - name: Retain exact checkout identities
+        run: |
+          git rev-parse HEAD > evidence/uc_animation_clock/technical-art-head.txt
+          git -C .animal-animation rev-parse HEAD > evidence/uc_animation_clock/animation-head.txt
+          git -C .uc-animation-runtime-previous rev-parse HEAD > evidence/uc_animation_clock/previous-uc-head.txt
+          git -C .uc-animation-runtime rev-parse HEAD > evidence/uc_animation_clock/uc-head.txt
+          git -C .uc-animation-runtime-previous rev-parse HEAD:src/axm_uc/game_animation_runtime.py > evidence/uc_animation_clock/previous-uc-runtime-blob.txt
+          git -C .uc-animation-runtime rev-parse HEAD:src/axm_uc/game_animation_runtime.py > evidence/uc_animation_clock/uc-runtime-blob.txt
+      - name: Upload Animal animation clock bridge evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: quadruped-animation-current-uc-clock-bridge-evidence
+          path: evidence/uc_animation_clock/
+          if-no-files-found: error
+
+  animal-source-successor-current-uc-clock-bridge:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout exact Technical Art head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Checkout exact source-successor Animation producer
+        uses: actions/checkout@v4
+        with:
+          repository: mike-axiom-mir/axm-animal-design
+          ref: badd8574b1acb5b4adf23544a9befc7cad86d1a1
+          path: .animal-animation-successor
+      - name: Checkout exact source-successor Rigging donor
+        uses: actions/checkout@v4
+        with:
+          repository: mike-axiom-mir/axm-animal-design
+          ref: b48bb957622ed5c82a24ca4fcb471f7ee9b5147a
+          path: .animal-rigging-successor
+      - name: Checkout exact historical rig/profile donor
+        uses: actions/checkout@v4
+        with:
+          repository: mike-axiom-mir/axm-animal-design
+          ref: 04760112deb81a8d145226fe7ee02923107c9916
+          path: .animal-rig-donor
+      - name: Checkout current Universal Creation
+        uses: actions/checkout@v4
+        with:
+          repository: mike-axiom-mir/axm-universal-creation
+          ref: 091c90047a38894ebdb88dba268f1212411a6cc4
+          path: .uc-source-successor-runtime
+      - name: Compile source-successor Technical Art bridge
+        run: python -m compileall -q tools/build_uc_source_successor_animation_clock_bridge_evidence.py
+      - name: Build exact source-successor Animation -> current UC clock evidence
+        env:
+          AXM_ANIMAL_ANIMATION_COMMIT: badd8574b1acb5b4adf23544a9befc7cad86d1a1
+          AXM_ANIMAL_ANIMATION_CHECKOUT: ${{ github.workspace }}/.animal-animation-successor
+          AXM_ANIMAL_SUCCESSOR_RIGGING_COMMIT: b48bb957622ed5c82a24ca4fcb471f7ee9b5147a
+          AXM_ANIMAL_SUCCESSOR_RIGGING_CHECKOUT: ${{ github.workspace }}/.animal-rigging-successor
+          AXM_ANIMAL_RIG_DONOR_COMMIT: 04760112deb81a8d145226fe7ee02923107c9916
+          AXM_ANIMAL_RIG_DONOR_CHECKOUT: ${{ github.workspace }}/.animal-rig-donor
+          AXM_UC_COMMIT: 091c90047a38894ebdb88dba268f1212411a6cc4
+          AXM_UC_CHECKOUT: ${{ github.workspace }}/.uc-source-successor-runtime
+        run: PYTHONPATH=.uc-source-successor-runtime/src python tools/build_uc_source_successor_animation_clock_bridge_evidence.py
+      - name: Retain exact checkout identities
+        run: |
+          git rev-parse HEAD > evidence/uc_source_successor_animation_clock/technical-art-head.txt
+          git -C .animal-animation-successor rev-parse HEAD > evidence/uc_source_successor_animation_clock/animation-head.txt
+          git -C .animal-rigging-successor rev-parse HEAD > evidence/uc_source_successor_animation_clock/rigging-head.txt
+          git -C .animal-rig-donor rev-parse HEAD > evidence/uc_source_successor_animation_clock/rig-donor-head.txt
+          git -C .uc-source-successor-runtime rev-parse HEAD > evidence/uc_source_successor_animation_clock/uc-head.txt
+          git -C .uc-source-successor-runtime rev-parse HEAD:src/axm_uc/game_animation_runtime.py > evidence/uc_source_successor_animation_clock/uc-runtime-blob.txt
+      - name: Upload source-successor Animal animation clock bridge evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: quadruped-source-successor-current-uc-clock-bridge-evidence
+          path: evidence/uc_source_successor_animation_clock/
+          if-no-files-found: error
+
+  animal-source-successor-current-uc-surface-bridge:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout exact Technical Art head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Checkout exact source-successor Geometry producer
+        uses: actions/checkout@v4
+        with:
+          repository: mike-axiom-mir/axm-animal-design
+          ref: eb5ce99798b646b6ab9705c0c914b898173f7cc1
+          path: .animal-geometry-source-successor
+      - name: Checkout exact UC topology observer required by Geometry producer
+        uses: actions/checkout@v4
+        with:
+          repository: mike-axiom-mir/axm-universal-creation
+          ref: b434a349cf159b392148b4dc9d68146573531a60
+          path: .uc-topology-donor
+      - name: Checkout previous proven UC surface pin
+        uses: actions/checkout@v4
+        with:
+          repository: mike-axiom-mir/axm-universal-creation
+          ref: 9a4ab8156772536526dd75bb2acab81e9b88f517
+          path: .uc-surface-previous
+      - name: Checkout current Universal Creation
+        uses: actions/checkout@v4
+        with:
+          repository: mike-axiom-mir/axm-universal-creation
+          ref: 2595788885faca5fbe69e1497b55d535aff51259
+          path: .uc-source-successor-surface
+      - name: Compile source-successor surface bridge
+        run: python -m compileall -q tools/build_uc_source_successor_surface_bridge_evidence.py
+      - name: Regenerate exact source-successor candidate through Geometry owner
+        run: |
+          mkdir -p evidence/uc_source_successor_surface/producer
+          PYTHONPATH=.animal-geometry-source-successor/src:.uc-topology-donor/src \
+            python .animal-geometry-source-successor/tools/build_source_successor_topology_rebind_evidence.py \
+              --source .animal-geometry-source-successor/examples/quadruped_neutral_001.json \
+              --profile .animal-geometry-source-successor/examples/quadruped_elbow_source_successor_003.json \
+              --out evidence/uc_source_successor_surface/producer
+      - name: Build exact selected-003 Geometry -> current UC -> GLB evidence
+        env:
+          AXM_ANIMAL_GEOMETRY_COMMIT: eb5ce99798b646b6ab9705c0c914b898173f7cc1
+          AXM_ANIMAL_GEOMETRY_CHECKOUT: ${{ github.workspace }}/.animal-geometry-source-successor
+          AXM_GEOMETRY_PRODUCER_EVIDENCE: ${{ github.workspace }}/evidence/uc_source_successor_surface/producer
+          AXM_PREVIOUS_UC_COMMIT: 9a4ab8156772536526dd75bb2acab81e9b88f517
+          AXM_PREVIOUS_UC_CHECKOUT: ${{ github.workspace }}/.uc-surface-previous
+          AXM_UC_COMMIT: 2595788885faca5fbe69e1497b55d535aff51259
+          AXM_UC_CHECKOUT: ${{ github.workspace }}/.uc-source-successor-surface
+        run: PYTHONPATH=src:.uc-source-successor-surface/src python tools/build_uc_source_successor_surface_bridge_evidence.py
+      - name: Retain exact checkout identities
+        run: |
+          git rev-parse HEAD > evidence/uc_source_successor_surface/technical-art-head.txt
+          git -C .animal-geometry-source-successor rev-parse HEAD > evidence/uc_source_successor_surface/geometry-head.txt
+          git -C .uc-surface-previous rev-parse HEAD > evidence/uc_source_successor_surface/previous-uc-head.txt
+          git -C .uc-source-successor-surface rev-parse HEAD > evidence/uc_source_successor_surface/uc-head.txt
+          git -C .uc-surface-previous rev-parse HEAD:src/axm_uc/procedural_3d.py > evidence/uc_source_successor_surface/previous-uc-procedural-3d-blob.txt
+          git -C .uc-source-successor-surface rev-parse HEAD:src/axm_uc/procedural_3d.py > evidence/uc_source_successor_surface/uc-procedural-3d-blob.txt
+          grep -q 'PASS_SOURCE_SUCCESSOR_GEOMETRY_TO_CURRENT_UC_GLB' evidence/uc_source_successor_surface/quadruped_selected003_uc_bridge.evidence.json
+      - name: Upload source-successor static UC bridge evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: quadruped-source-successor-current-uc-surface-bridge-evidence
+          path: evidence/uc_source_successor_surface/
+          if-no-files-found: error

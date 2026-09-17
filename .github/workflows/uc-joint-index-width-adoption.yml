@@ -1,0 +1,171 @@
+name: UC Technical Art joint-index width adoption evidence
+
+on:
+  pull_request:
+    paths:
+      - "src/axm_animal_design/uc_rigged_tangent_bridge.py"
+      - "tests/test_uc_joint_index_width_adoption.py"
+      - "tools/build_uc_joint_index_width_adoption_evidence.py"
+      - ".github/workflows/uc-joint-index-width-adoption.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  producer-side-joints-width-to-current-uc:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout exact Technical Art head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          path: animal-ta
+          fetch-depth: 0
+
+      - name: Bind exact Technical Art head
+        shell: bash
+        run: |
+          set -euo pipefail
+          TA_HEAD="$(git -C animal-ta rev-parse HEAD)"
+          echo "TA_HEAD=${TA_HEAD}" >> "$GITHUB_ENV"
+          if [ -n "${{ github.event.pull_request.head.sha }}" ]; then
+            test "${TA_HEAD}" = "${{ github.event.pull_request.head.sha }}"
+          else
+            test "${TA_HEAD}" = "${GITHUB_SHA}"
+          fi
+
+      - name: Checkout exact Geometry UV tangent owner head
+        uses: actions/checkout@v4
+        with:
+          repository: mike-axiom-mir/axm-animal-design
+          ref: ca4bb8a2f144231f8755eacc980785d1807b79db
+          path: geometry
+
+      - name: Checkout exact Animation owner head
+        uses: actions/checkout@v4
+        with:
+          repository: mike-axiom-mir/axm-animal-design
+          ref: 1a8c929ce4372c4b1b1f29e9ac4cadd0cc26ac48
+          path: animation
+
+      - name: Checkout exact mirror-surface Rigging head
+        uses: actions/checkout@v4
+        with:
+          repository: mike-axiom-mir/axm-animal-design
+          ref: 4acd9286140dd008f2a4f01ff513912497313e4f
+          path: rigging
+
+      - name: Checkout exact rig-plan donor
+        uses: actions/checkout@v4
+        with:
+          repository: mike-axiom-mir/axm-animal-design
+          ref: 04760112deb81a8d145226fe7ee02923107c9916
+          path: rig-donor
+
+      - name: Checkout current Universal Creation
+        uses: actions/checkout@v4
+        with:
+          repository: mike-axiom-mir/axm-universal-creation
+          ref: e6826acbc7296ba77d25534c8d3d3770ff3fa747
+          path: uc
+
+      - name: Verify exact owner and current generic receiver identities
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C geometry rev-parse HEAD)" = "ca4bb8a2f144231f8755eacc980785d1807b79db"
+          test "$(git -C geometry rev-parse HEAD:src/axm_animal_design/bilateral_uv_tangent_basis.py)" = "ba0b4e620f132413606177358e47bd32ae4d4965"
+          test "$(git -C animation rev-parse HEAD)" = "1a8c929ce4372c4b1b1f29e9ac4cadd0cc26ac48"
+          test "$(git -C rigging rev-parse HEAD)" = "4acd9286140dd008f2a4f01ff513912497313e4f"
+          test "$(git -C rig-donor rev-parse HEAD)" = "04760112deb81a8d145226fe7ee02923107c9916"
+          test "$(git -C uc rev-parse HEAD)" = "e6826acbc7296ba77d25534c8d3d3770ff3fa747"
+          test "$(git -C uc rev-parse HEAD:capabilities/platform-hands/shared/asset-hands/rigged-gltf-codec.js)" = "b1f2e68bb6c6800af5496decc95a8044d141edc9"
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Preserve Technical Art receiving tests
+        working-directory: animal-ta
+        run: |
+          python -m compileall -q src tests tools
+          python -m unittest discover -s tests -v
+
+      - name: Rebuild exact Geometry-owned UV tangent basis
+        working-directory: geometry
+        env:
+          PYTHONPATH: src
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf "$RUNNER_TEMP/geometry-basis"
+          python tools/build_bilateral_uv_tangent_basis_evidence.py \
+            --source examples/quadruped_neutral_001.json \
+            --left-profile examples/quadruped_elbow_source_successor_003.json \
+            --bilateral-profile examples/quadruped_elbow_bilateral_successor_003.json \
+            --parent-head 91e2fd01be63df807c035b39f7ec824a4a5a60b8 \
+            --normal-head 79e1667f6cc91e2ec8e41f01df18b6933c9c876d \
+            --materials-head a2cd0a6135a7c8502aef9572f7079a3dd2632103 \
+            --topology-head bdbb51303bd1b96866b06a71730ccc328bf4f2f6 \
+            --normal-module-blob 14a1ba3a1e4c96270197f4f449505113f7bf3e6e \
+            --topology-module-blob 9a0ebcc6169445996756bb446a87e3baf8b9cc33 \
+            --exact-head "$(git rev-parse HEAD)" \
+            --out-dir "$RUNNER_TEMP/geometry-basis"
+          grep -q 'PASS_BILATERAL_UV_TANGENT_BASIS_CANDIDATE__FINAL_UV_VISUAL_TRANSPORT_HELD' \
+            "$RUNNER_TEMP/geometry-basis/geometry-uv-tangent-evidence.json"
+
+      - name: Rebuild exact Animation-owned 41-sample producer evidence
+        working-directory: animation
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf "$RUNNER_TEMP/owner-animation" "$RUNNER_TEMP/owner-animation-payload"
+          python tools/build_bilateral_mirror_surface_animation_godot_evidence.py \
+            --rigging-root "$GITHUB_WORKSPACE/rigging" \
+            --rig-donor-root "$GITHUB_WORKSPACE/rig-donor" \
+            --rigging-head 4acd9286140dd008f2a4f01ff513912497313e4f \
+            --clip "$GITHUB_WORKSPACE/animation/examples/quadruped_articulation_loop_001.json" \
+            --out "$RUNNER_TEMP/owner-animation" \
+            --payload-dir "$RUNNER_TEMP/owner-animation-payload"
+          grep -q 'PASS_BILATERAL_EXACT_MIRROR_SURFACE_41_SAMPLE_MOTION_REBIND' \
+            "$RUNNER_TEMP/owner-animation/bilateral_mirror_surface_motion_receipt.json"
+
+      - name: Build producer-adopted narrow JOINTS GLB and validate through current UC
+        working-directory: animal-ta
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf evidence/uc_joint_index_width_adoption
+          python tools/build_uc_joint_index_width_adoption_evidence.py \
+            --geometry-evidence "$RUNNER_TEMP/geometry-basis" \
+            --animation-evidence "$RUNNER_TEMP/owner-animation" \
+            --rigging-root "$GITHUB_WORKSPACE/rigging" \
+            --rig-donor-root "$GITHUB_WORKSPACE/rig-donor" \
+            --uc-root "$GITHUB_WORKSPACE/uc" \
+            --technical-art-head "$TA_HEAD" \
+            --out evidence/uc_joint_index_width_adoption
+          grep -q 'PASS_TECHNICAL_ART_PRODUCER_ADOPTS_BOUNDED_JOINT_INDEX_WIDTH' \
+            evidence/uc_joint_index_width_adoption/joint_index_width_adoption_receipt.json
+          grep -q '"component_type": 5121' \
+            evidence/uc_joint_index_width_adoption/joint_index_width_adoption_receipt.json
+          test "$(cat evidence/uc_joint_index_width_adoption/technical-art-head.txt)" = "$TA_HEAD"
+          test "$(cat evidence/uc_joint_index_width_adoption/uc-head.txt)" = "e6826acbc7296ba77d25534c8d3d3770ff3fa747"
+          test "$(cat evidence/uc_joint_index_width_adoption/uc-codec-blob.txt)" = "b1f2e68bb6c6800af5496decc95a8044d141edc9"
+
+      - name: Retain exact owner evidence beside adoption evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp "$RUNNER_TEMP/geometry-basis/geometry-uv-tangent-evidence.json" animal-ta/evidence/uc_joint_index_width_adoption/geometry-owner-receipt.json
+          cp "$RUNNER_TEMP/owner-animation/bilateral_mirror_surface_motion_receipt.json" animal-ta/evidence/uc_joint_index_width_adoption/animation-owner-receipt.json
+          cp "$RUNNER_TEMP/owner-animation/bilateral_mirror_surface_motion_frames.json" animal-ta/evidence/uc_joint_index_width_adoption/animation-owner-frames.json
+
+      - name: Upload exact Technical Art producer-adoption evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: animal-current-uc-joint-index-width-adoption-${{ github.event.pull_request.head.sha || github.sha }}
+          path: animal-ta/evidence/uc_joint_index_width_adoption
+          if-no-files-found: error
+          retention-days: 30
