@@ -1,0 +1,55 @@
+name: Animation dense subframe continuity
+
+on:
+  pull_request:
+    paths:
+      - "src/axm_animal_design/animation_subframe_continuity.py"
+      - "tests/test_animation_subframe_continuity.py"
+      - "tools/build_animation_subframe_continuity.py"
+      - "docs/animation_subframe_continuity.md"
+      - ".github/workflows/animation-subframe-continuity.yml"
+      - "src/axm_animal_design/animation_motion.py"
+      - "examples/quadruped_neutral_001.json"
+      - "examples/quadruped_rig_probe_001.json"
+      - "examples/quadruped_articulation_loop_001.json"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Run dense subframe continuity tests
+        run: python -m unittest tests.test_animation_subframe_continuity -v
+
+      - name: Build dense subframe continuity evidence
+        if: matrix.python-version == '3.11'
+        env:
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          rm -rf evidence/animation-subframe-continuity
+          PYTHONPATH=src python tools/build_animation_subframe_continuity.py \
+            --current-animation-head "$HEAD_SHA" \
+            --out evidence/animation-subframe-continuity
+
+      - name: Upload dense subframe continuity evidence
+        if: matrix.python-version == '3.11'
+        uses: actions/upload-artifact@v4
+        with:
+          name: animal-animation-subframe-continuity
+          path: evidence/animation-subframe-continuity
+          if-no-files-found: error
