@@ -225,7 +225,7 @@ func _metrics_pass(metrics: Dictionary) -> bool:
 
 func _octahedron_encode(value: Vector3) -> Vector2:
 	var n := value
-	var denominator := abs(n.x) + abs(n.y) + abs(n.z)
+	var denominator: float = abs(n.x) + abs(n.y) + abs(n.z)
 	if denominator <= 0.0:
 		_fatal("cannot octahedrally encode a zero direction")
 	n /= denominator
