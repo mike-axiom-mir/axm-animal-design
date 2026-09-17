@@ -1,0 +1,152 @@
+name: Runtime Animal post-skin frame-plan evidence
+
+on:
+  pull_request:
+    paths:
+      - "src/axm_animal_design/runtime_post_skin_frame_plan.py"
+      - "tests/test_runtime_post_skin_frame_plan.py"
+      - "tools/build_runtime_post_skin_frame_plan_evidence.py"
+      - "docs/runtime_post_skin_frame_plan.md"
+      - ".github/workflows/runtime-post-skin-frame-plan.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  runtime-post-skin-frame-plan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    strategy:
+      matrix:
+        python-version: ['3.11', '3.13']
+    steps:
+      - name: Checkout exact Runtime head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          path: animal
+          fetch-depth: 0
+
+      - name: Bind exact owner lineage without rewriting it
+        working-directory: animal
+        shell: bash
+        run: |
+          set -euo pipefail
+          git merge-base --is-ancestor 81ab44eab2e13bed95187610a476be2b2c4667a7 HEAD
+          test "$(git hash-object src/axm_animal_design/transported_frame_reconstruction_constraint.py)" = "c9916c62e2081922b8eb7ec0b3cd1c25c019b2f6"
+          test "$(git hash-object src/axm_animal_design/bilateral_deformed_tangent_frames.py)" = "fbade964b3305d70775d196232ad2cd4671d0eac"
+          test "$(git hash-object src/axm_animal_design/bilateral_logical_quad_normals.py)" = "14a1ba3a1e4c96270197f4f449505113f7bf3e6e"
+          test "$(git hash-object src/axm_animal_design/bilateral_uv_tangent_basis.py)" = "ba0b4e620f132413606177358e47bd32ae4d4965"
+
+      - name: Checkout exact Rigging plan and weighting-profile donor
+        uses: actions/checkout@v4
+        with:
+          repository: mike-axiom-mir/axm-animal-design
+          ref: 04760112deb81a8d145226fe7ee02923107c9916
+          path: rig-donor
+          fetch-depth: 1
+
+      - name: Verify exact Rigging donor
+        run: test "$(git -C rig-donor rev-parse HEAD)" = "04760112deb81a8d145226fe7ee02923107c9916"
+
+      - name: Download exact retained Technical Art source transport
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf ta-source /tmp/axm-ta-source.zip
+          mkdir -p ta-source
+          gh api repos/${{ github.repository }}/actions/artifacts/10474385703/zip > /tmp/axm-ta-source.zip
+          echo "7fc2a7f5d745da593e8762efa98e13661f84a057b1eb60921d576c366e71d7bb  /tmp/axm-ta-source.zip" | sha256sum -c -
+          unzip -q /tmp/axm-ta-source.zip -d ta-source
+          TA_GLB="$(find "$GITHUB_WORKSPACE/ta-source" -name 'animal_selected003_right_mirror_rigged_uv_tangent_41key.glb' -print -quit)"
+          TA_RECEIPT="$(find "$GITHUB_WORKSPACE/ta-source" -name 'uc_rigged_uv_tangent_transport_receipt.json' -print -quit)"
+          test -n "$TA_GLB"
+          test -n "$TA_RECEIPT"
+          test "$(sha256sum "$TA_GLB" | awk '{print $1}')" = "ecb122e3274929c3d99bc8e29a472aaa2657bcb16b13331a4f1972bb6ec6b493"
+          grep -q '4649d144841fbd1f3f43e9c7deb6f37b91fbd93d' "$TA_RECEIPT"
+          echo "AXM_TA_GLB=$TA_GLB" >> "$GITHUB_ENV"
+          echo "AXM_TA_RECEIPT=$TA_RECEIPT" >> "$GITHUB_ENV"
+          echo "AXM_RIG_PLAN=$GITHUB_WORKSPACE/rig-donor/examples/quadruped_rig_probe_001.json" >> "$GITHUB_ENV"
+          echo "AXM_WEIGHTING_PROFILE=$GITHUB_WORKSPACE/rig-donor/examples/quadruped_weighting_refinement_001.json" >> "$GITHUB_ENV"
+
+      - name: Download exact Technical Art adopted reconstruction contract
+        if: matrix.python-version == '3.11'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf ta-contract /tmp/axm-ta-contract.zip
+          mkdir -p ta-contract
+          gh api repos/${{ github.repository }}/actions/artifacts/10506183243/zip > /tmp/axm-ta-contract.zip
+          echo "58d4f4f35bccdcc24deb4eb624279070cc9eb52d54c97b2fba6ff4cbe7da1973  /tmp/axm-ta-contract.zip" | sha256sum -c -
+          unzip -q /tmp/axm-ta-contract.zip -d ta-contract
+          TA_CONTRACT="$(find "$GITHUB_WORKSPACE/ta-contract" -name 'uc_direction_frame_reconstruction_contract_evidence.json' -print -quit)"
+          test -n "$TA_CONTRACT"
+          grep -q 'PASS_POST_SKIN_OWNER_FRAME_RECONSTRUCTION_CONTRACT_ADOPTED__HOLD_TARGET_RUNTIME_IMPLEMENTATION' "$TA_CONTRACT"
+          grep -q '"target_runtime_implemented": false' "$TA_CONTRACT"
+          grep -R -q 'a3c062f1271e72598971446b37847598d2433d93' ta-contract
+          echo "AXM_TA_CONTRACT=$TA_CONTRACT" >> "$GITHUB_ENV"
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Compile Runtime additions
+        working-directory: animal
+        run: python -m compileall -q src tests tools
+
+      - name: Run full inherited Animal suite plus Runtime plan tests
+        working-directory: animal
+        env:
+          PYTHONPATH: src
+          AXM_RIG_PLAN: ../rig-donor/examples/quadruped_rig_probe_001.json
+          AXM_WEIGHTING_PROFILE: ../rig-donor/examples/quadruped_weighting_refinement_001.json
+        run: python -m unittest discover -s tests -v
+
+      - name: Build exact all-key Runtime frame-plan evidence
+        if: matrix.python-version == '3.11'
+        working-directory: animal
+        env:
+          PYTHONPATH: src
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf evidence/runtime-post-skin-frame-plan-001
+          python tools/build_runtime_post_skin_frame_plan_evidence.py \
+            --source examples/quadruped_neutral_001.json \
+            --left-profile examples/quadruped_elbow_source_successor_003.json \
+            --bilateral-profile examples/quadruped_elbow_bilateral_successor_003.json \
+            --rig-plan "$AXM_RIG_PLAN" \
+            --weighting-profile "$AXM_WEIGHTING_PROFILE" \
+            --technical-art-receipt "$AXM_TA_RECEIPT" \
+            --technical-art-glb "$AXM_TA_GLB" \
+            --technical-art-head 4649d144841fbd1f3f43e9c7deb6f37b91fbd93d \
+            --technical-art-module-blob 90343f493389446f06d58202cb7465c98307458f \
+            --technical-art-artifact-id 10474385703 \
+            --technical-art-artifact-sha256 7fc2a7f5d745da593e8762efa98e13661f84a057b1eb60921d576c366e71d7bb \
+            --owner-rigging-head 81ab44eab2e13bed95187610a476be2b2c4667a7 \
+            --runtime-head "$(git rev-parse HEAD)" \
+            --out evidence/runtime-post-skin-frame-plan-001
+          grep -q 'PASS_ANIMAL_POST_SKIN_FRAME_PLAN_COMPILED_EXACT_41KEY_FRAME_IDENTITY__PROOF_HOST_CPU_REDUCTION__HOLD_TARGET_RUNTIME_BILATERAL_SHADED_DEVICE' evidence/runtime-post-skin-frame-plan-001/runtime-post-skin-frame-plan-result.json
+          grep -q '"exact_frame_array_keys": 41' evidence/runtime-post-skin-frame-plan-001/runtime-post-skin-frame-plan-result.json
+          grep -q '"status": "PASS_MUTATION_DETECTED"' evidence/runtime-post-skin-frame-plan-001/runtime-post-skin-frame-plan-result.json
+          cp "$AXM_TA_CONTRACT" evidence/runtime-post-skin-frame-plan-001/exact-technical-art-adopted-contract.json
+          printf '%s\n' 'a3c062f1271e72598971446b37847598d2433d93' > evidence/runtime-post-skin-frame-plan-001/exact-technical-art-contract-head.txt
+          printf '%s\n' '58d4f4f35bccdcc24deb4eb624279070cc9eb52d54c97b2fba6ff4cbe7da1973' > evidence/runtime-post-skin-frame-plan-001/exact-technical-art-contract-artifact-sha256.txt
+          cat > evidence/runtime-post-skin-frame-plan-001/README.txt <<'EOF'
+          Runtime / Optimization evidence only. This packet compiles immutable render/source topology and UV-derivative facts around the exact Rigging-owned post-skin owner-frame reconstruction, then proves exact receiver-frame array identity across all 41 transported right-side keys while measuring proof-host CPU cost. It is not a real target-runtime implementation, bilateral receiving proof, fresh shaded acceptance, target-device result, UC extraction, CANON or production readiness.
+          EOF
+
+      - name: Upload exact Runtime frame-plan evidence
+        if: ${{ always() && matrix.python-version == '3.11' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: animal-runtime-post-skin-frame-plan-${{ github.event.pull_request.head.sha || github.sha }}
+          path: animal/evidence/runtime-post-skin-frame-plan-001
+          if-no-files-found: error
+          retention-days: 30
