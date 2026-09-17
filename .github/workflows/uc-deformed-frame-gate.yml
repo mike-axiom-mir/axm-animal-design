@@ -138,7 +138,7 @@ jobs:
             test "${TA_HEAD}" = "${GITHUB_SHA}"
           fi
           git -C animal-ta merge-base --is-ancestor 01458a9697406a649b0e1e3bf3997f7ea817a344 HEAD
-          test "$(git -C animal-ta hash-object src/axm_animal_design/uc_rigged_tangent_bridge.py)" = "90343f493389446f06d58202cb7465c98307458f"
+          test "$(git -C animal-ta hash-object src/axm_animal_design/uc_rigged_tangent_bridge.py)" = "68acd2ad5d335a4c6bcabf3d4d0208d7123c12eb"
 
       - name: Download exact Rigging owner reconstruction evidence
         env:
