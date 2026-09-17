@@ -53,7 +53,7 @@ jobs:
         run: |
           set -euo pipefail
           test "$(git -C geometry rev-parse HEAD)" = "ca4bb8a2f144231f8755eacc980785d1807b79db"
-          test "$(git -C geometry rev-parse HEAD:src/axm_animal_design/bilateral_uv_tangent_basis.py)" = "f27140c5163297374fe0743d4cfe6cfe086945c7"
+          test "$(git -C geometry rev-parse HEAD:src/axm_animal_design/bilateral_uv_tangent_basis.py)" = "ba0b4e620f132413606177358e47bd32ae4d4965"
           test "$(git -C uc rev-parse HEAD)" = "3601688dc15fb752fcd51bb536722db2f1267a8f"
           test "$(git -C uc rev-parse HEAD:src/axm_uc/indexed_surface_eligibility.py)" = "2cbcafd21c2d8d44cf53ba67120f35ff5bd06bc5"
 
