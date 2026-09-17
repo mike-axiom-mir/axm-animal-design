@@ -1,0 +1,183 @@
+name: Runtime Animal exact-key payload dedup evidence
+
+on:
+  pull_request:
+    paths:
+      - "tools/godot_runtime_direction_frame_payload_dedup_probe.gd"
+      - "tools/verify_runtime_direction_frame_payload_dedup.py"
+      - ".github/workflows/runtime-animal-direction-frame-payload-dedup.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  runtime-animal-exact-key-payload-dedup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout exact Runtime head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          path: animal-runtime
+          fetch-depth: 0
+
+      - name: Bind pass-41 lineage
+        working-directory: animal-runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          RUNTIME_HEAD="$(git rev-parse HEAD)"
+          echo "RUNTIME_HEAD=$RUNTIME_HEAD" >> "$GITHUB_ENV"
+          git merge-base --is-ancestor 57d6f10ab04694d4fea8ef0803ac32f8623b15e6 HEAD
+          test -f tools/godot_runtime_direction_frame_dynamic_render_probe.gd
+          test -f tools/godot_runtime_direction_frame_dynamic_render_probe_v2.gd
+          test -f tools/godot_runtime_direction_frame_payload_dedup_probe.gd
+          test -f tools/verify_runtime_direction_frame_payload_dedup.py
+
+      - name: Checkout exact Technical Art receiver owner
+        uses: actions/checkout@v4
+        with:
+          repository: mike-axiom-mir/axm-animal-design
+          ref: 1ca28d29c7e1aaa095c11aaa6085716669230cb3
+          path: animal-ta-current
+          fetch-depth: 1
+
+      - name: Download exact Technical Art packet and pass-41 evidence
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C animal-ta-current rev-parse HEAD)" = "1ca28d29c7e1aaa095c11aaa6085716669230cb3"
+          mkdir -p "$RUNNER_TEMP/ta-current" "$RUNNER_TEMP/pass41"
+          gh api repos/mike-axiom-mir/axm-animal-design/actions/artifacts/10514887379/zip > "$RUNNER_TEMP/ta-current.zip"
+          echo "50ece0d05336e85662c9b1753d0ff5c42699c96f4e1e5a310a49e320895bfa60  $RUNNER_TEMP/ta-current.zip" | sha256sum -c -
+          unzip -q "$RUNNER_TEMP/ta-current.zip" -d "$RUNNER_TEMP/ta-current"
+          TA_PACKET="$(find "$RUNNER_TEMP/ta-current" -name 'technical-art-target-host-packet.json' -print -quit)"
+          TA_RECEIPT="$(find "$RUNNER_TEMP/ta-current" -name 'godot-arraymesh-target-host-receipt.json' -print -quit)"
+          test -n "$TA_PACKET" && test -n "$TA_RECEIPT"
+          grep -q 'PASS_TECHNICAL_ART_GODOT_ARRAYMESH_OWNER_RECONSTRUCTED_FRAME_41_KEYS_RIGHT' "$TA_RECEIPT"
+          echo "TA_PACKET=$TA_PACKET" >> "$GITHUB_ENV"
+          echo "TA_RECEIPT=$TA_RECEIPT" >> "$GITHUB_ENV"
+
+          gh api repos/mike-axiom-mir/axm-animal-design/actions/artifacts/10517956976/zip > "$RUNNER_TEMP/pass41.zip"
+          echo "4e4062004015f4bf2f14c99b7179ee8b362063699a98c80dc383f4baf9740486  $RUNNER_TEMP/pass41.zip" | sha256sum -c -
+          unzip -q "$RUNNER_TEMP/pass41.zip" -d "$RUNNER_TEMP/pass41"
+          grep -R -q 'PASS_ANIMAL_GODOT_PERSISTENT_VERTEX_BUFFER_UPDATE__41_TO_0_SURFACE_REBUILDS__41_RENDER_PAIRS_IDENTICAL__HOLD_DEVICE_ART' "$RUNNER_TEMP/pass41"
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Compile Runtime verifier
+        working-directory: animal-runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m py_compile tools/verify_runtime_direction_frame_payload_dedup.py
+
+      - name: Setup exact Godot proof host
+        uses: chickensoft-games/setup-godot@v2
+        with:
+          version: 4.7.2
+          use-dotnet: false
+          include-templates: false
+
+      - name: Re-prove exact Technical Art packet first
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p animal-runtime/evidence/runtime-animal-direction-frame-payload-dedup-001
+          godot --headless \
+            --script animal-ta-current/tools/godot_direction_frame_target_host_probe.gd -- \
+            --payload "$TA_PACKET" \
+            --out "$GITHUB_WORKSPACE/animal-runtime/evidence/runtime-animal-direction-frame-payload-dedup-001/current-ta-baseline-receipt.json"
+          grep -q 'PASS_TECHNICAL_ART_GODOT_ARRAYMESH_OWNER_RECONSTRUCTED_FRAME_41_KEYS_RIGHT' \
+            animal-runtime/evidence/runtime-animal-direction-frame-payload-dedup-001/current-ta-baseline-receipt.json
+
+      - name: Measure exact-key cache dedup through persistent receiver
+        working-directory: animal-runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          ROOT=evidence/runtime-animal-direction-frame-payload-dedup-001
+          mkdir -p "$ROOT/images"
+          xvfb-run -a godot --rendering-method gl_compatibility --audio-driver Dummy \
+            --script tools/godot_runtime_direction_frame_payload_dedup_probe.gd -- \
+            --payload "$TA_PACKET" \
+            --out "$(pwd)/$ROOT/runtime-payload-dedup-result.json" \
+            --image-dir "$(pwd)/$ROOT/images"
+          python tools/verify_runtime_direction_frame_payload_dedup.py "$ROOT/runtime-payload-dedup-result.json"
+
+      - name: Fail closed if cache reduction or visual identity is weakened
+        working-directory: animal-runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          source = Path('evidence/runtime-animal-direction-frame-payload-dedup-001/runtime-payload-dedup-result.json')
+          data = json.loads(source.read_text(encoding='utf-8'))
+          data['cache_budget']['unique_payload_count'] = 41
+          data['cache_budget']['deduplicated_cache_bytes'] = data['cache_budget']['full_cache_bytes']
+          data['cache_budget']['saved_cache_bytes'] = 0
+          data['cache_budget']['saved_cache_percent'] = 0.0
+          out = Path('/tmp/runtime-payload-dedup-mutated.json')
+          out.write_text(json.dumps(data, indent=2, sort_keys=True) + '\n', encoding='utf-8')
+          PY
+          if python tools/verify_runtime_direction_frame_payload_dedup.py /tmp/runtime-payload-dedup-mutated.json; then
+            echo 'mutated non-deduplicated cache unexpectedly passed' >&2
+            exit 1
+          fi
+
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          source = Path('evidence/runtime-animal-direction-frame-payload-dedup-001/runtime-payload-dedup-result.json')
+          data = json.loads(source.read_text(encoding='utf-8'))
+          data['render_equivalence']['byte_identical_pairs'] = 40
+          data['render_equivalence']['total_changed_pixels'] = 1
+          out = Path('/tmp/runtime-payload-dedup-render-mutated.json')
+          out.write_text(json.dumps(data, indent=2, sort_keys=True) + '\n', encoding='utf-8')
+          PY
+          if python tools/verify_runtime_direction_frame_payload_dedup.py /tmp/runtime-payload-dedup-render-mutated.json; then
+            echo 'mutated visual identity unexpectedly passed' >&2
+            exit 1
+          fi
+
+      - name: Retain exact identities metrics and tradeoffs
+        working-directory: animal-runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          ROOT=evidence/runtime-animal-direction-frame-payload-dedup-001
+          printf '%s\n' "$RUNTIME_HEAD" > "$ROOT/exact-runtime-head.txt"
+          printf '%s\n' '57d6f10ab04694d4fea8ef0803ac32f8623b15e6' > "$ROOT/pass41-measured-runtime-head.txt"
+          printf '%s\n' '10517956976 4e4062004015f4bf2f14c99b7179ee8b362063699a98c80dc383f4baf9740486' > "$ROOT/pass41-artifact.txt"
+          printf '%s\n' '1ca28d29c7e1aaa095c11aaa6085716669230cb3' > "$ROOT/exact-technical-art-head.txt"
+          printf '%s\n' '10514887379 50ece0d05336e85662c9b1753d0ff5c42699c96f4e1e5a310a49e320895bfa60' > "$ROOT/technical-art-artifact.txt"
+          cp "$TA_RECEIPT" "$ROOT/exact-technical-art-target-host-receipt.json"
+          cp "$TA_PACKET" "$ROOT/exact-technical-art-target-host-packet.json"
+          cp -R "$RUNNER_TEMP/pass41" "$ROOT/pass41-retained-evidence"
+          cat > "$ROOT/README.txt" <<'EOF'
+          Bounded AXM Animal Runtime / Optimization evidence.
+          Pass 41 caches all 41 exact Godot-packed vertex payloads for its persistent-surface receiver. This pass asks only whether exact duplicate payload byte streams can share one cached payload while preserving the same key schedule and the same surface_update_vertex_region submissions.
+          The candidate does not interpolate, regenerate, quantize or reinterpret payload bytes. Every authored key must reconstruct the exact pass-41 byte stream before the memory reduction is accepted.
+          All 41 full-cache versus deduplicated-cache debug renders must remain byte-identical and the observer must detect real key-0 versus key-20 motion.
+          Proof-host submission timing is retained as an observation only because the selected improvement is memory/cache footprint, not a timing claim.
+          The reported payload-cache saving excludes the small key-to-unique mapping container; that exclusion is explicit in the machine receipt and must remain visible in any downstream budget claim.
+          Production-material shaded quality, bilateral receiving, continuous/interpolated playback, target-device CPU/GPU/FPS/VRAM/thermal/battery, Art Direction acceptance, Visual QA acceptance, UC extraction, CANON and production readiness remain HOLD.
+          EOF
+
+      - name: Upload exact Runtime payload-dedup evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: animal-runtime-direction-frame-payload-dedup-${{ github.event.pull_request.head.sha || github.sha }}
+          path: animal-runtime/evidence/runtime-animal-direction-frame-payload-dedup-001
+          if-no-files-found: warn
+          retention-days: 30
