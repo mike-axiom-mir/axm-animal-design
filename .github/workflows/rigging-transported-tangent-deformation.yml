@@ -7,6 +7,7 @@ on:
 permissions:
   contents: read
   actions: read
+  pull-requests: write
 
 jobs:
   rigging-transported-tangent-deformation:
@@ -110,6 +111,47 @@ jobs:
           grep -q '"position_equivalence_established": true' evidence/rigging-transported-tangent-deformation-001/transported-tangent-deformation-rigging-receipt.json
           grep -q '"animation_accepted": false' evidence/rigging-transported-tangent-deformation-001/transported-tangent-deformation-rigging-receipt.json
           grep -q '"runtime_or_controller_accepted": false' evidence/rigging-transported-tangent-deformation-001/transported-tangent-deformation-rigging-receipt.json
+
+      - name: Publish exact Rigging evidence summary to PR
+        if: matrix.python-version == '3.11' && github.event_name == 'pull_request'
+        working-directory: animal
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          import subprocess
+          from pathlib import Path
+
+          receipt_path = Path('evidence/rigging-transported-tangent-deformation-001/transported-tangent-deformation-rigging-receipt.json')
+          receipt = json.loads(receipt_path.read_text(encoding='utf-8'))
+          head = subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip()
+          motion = receipt['motion_boundary']
+          position = receipt['position_uv_handedness']
+          directions = receipt['direction_frames']
+          negative = receipt['negative_controls']['child_weight_mutation']
+          truth = receipt['truth_boundary']
+          body = f'''### Rigging transported tangent deformation evidence — exact head `{head}`
+
+          Scoped result: **`{receipt['state']}`**
+
+          - exact retained Technical Art GLB: `{receipt['technical_art']['glb_sha256']}`;
+          - authored-key boundary: `{motion['authored_key_count']}` keys across `{motion['time_start_seconds']}`→`{motion['time_end_seconds']}` s, transported quaternion angle range `{motion['minimum_angle_deg']}`→`{motion['maximum_angle_deg']}`° with neutral closure;
+          - position/UV/handedness gate: **{position['gate']}** — max position residual `{position['maximum_position_residual_m']}` m, max UV residual `{position['maximum_uv_residual']}`, tangent-W mismatches `{position['tangent_handedness_mismatch_count']}`;
+          - normal direction: max `{directions['maximum_normal_angle_deg']}`°, neutral max `{directions['neutral_maximum_normal_angle_deg']}`°, deformation excess `{directions['normal_deformation_excess_deg']}`°;
+          - raw tangent direction: max `{directions['maximum_raw_tangent_angle_deg']}`°, max raw |n·t| `{directions['maximum_raw_normal_tangent_dot_abs']}`;
+          - post-skin Gram–Schmidt witness: max tangent angle `{directions['maximum_corrected_tangent_angle_deg']}`°, neutral max `{directions['neutral_maximum_corrected_tangent_angle_deg']}`°, deformation excess `{directions['corrected_tangent_deformation_excess_deg']}`°, max corrected |n·t| `{directions['maximum_corrected_normal_tangent_dot_abs']}`, orthogonality gate **{directions['post_skin_gram_schmidt_orthogonality_gate']}**, direction-equivalence gate **{directions['equivalence_gate']}**;
+          - fail-closed blended child-weight mutation: render vertex `{negative['render_vertex']}`, peak key `{negative['peak_sample']}`, original residual `{negative['original_position_residual_m']}` m → mutated residual `{negative['mutated_position_residual_m']}` m (**{negative['status']}**).
+
+          Truth boundary remains explicit: source/rig/weights/Animation/Technical-Art GLB are unchanged; Animation accepted = `{truth['animation_accepted']}`; Runtime/controller accepted = `{truth['runtime_or_controller_accepted']}`; shaded visual quality accepted = `{truth['shaded_visual_quality_accepted']}`; CANON claimed = `{truth['canon_claimed']}`.
+          '''
+          body = '\n'.join(line.strip() if line.startswith('          ') else line for line in body.splitlines()) + '\n'
+          Path('/tmp/rigging-comment.md').write_text(body, encoding='utf-8')
+          PY
+          gh pr comment "$PR_NUMBER" --repo "$REPOSITORY" --body-file /tmp/rigging-comment.md
 
       - name: Upload exact transported tangent deformation Rigging evidence
         if: ${{ always() && matrix.python-version == '3.11' }}
