@@ -11,7 +11,7 @@ permissions:
   actions: read
 
 jobs:
-  runtime-u16-candidate-to-repaired-uc:
+  runtime-u16-candidate-to-merged-uc-main:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -41,12 +41,12 @@ jobs:
           ref: e768b4810bfa9da09c9b927bb719c363e0494612
           path: uc-old
 
-      - name: Checkout repaired UC receiver PR head
+      - name: Checkout merged UC main receiver
         uses: actions/checkout@v4
         with:
           repository: mike-axiom-mir/axm-universal-creation
-          ref: fbb75738210c676d4d76398bd3c3deb9a6dde920
-          path: uc-new
+          ref: 9332e3455092cf8b0011fd69607d99a1e82a2dc8
+          path: uc-merged
 
       - name: Verify exact UC identities
         shell: bash
@@ -54,8 +54,8 @@ jobs:
           set -euo pipefail
           test "$(git -C uc-old rev-parse HEAD)" = "e768b4810bfa9da09c9b927bb719c363e0494612"
           test "$(git -C uc-old rev-parse HEAD:capabilities/platform-hands/shared/asset-hands/rigged-gltf-codec.js)" = "b1f2e68bb6c6800af5496decc95a8044d141edc9"
-          test "$(git -C uc-new rev-parse HEAD)" = "fbb75738210c676d4d76398bd3c3deb9a6dde920"
-          test "$(git -C uc-new rev-parse HEAD:capabilities/platform-hands/shared/asset-hands/rigged-gltf-codec.js)" = "02b69b6c7368ba6e34f226ca545293d26d208922"
+          test "$(git -C uc-merged rev-parse HEAD)" = "9332e3455092cf8b0011fd69607d99a1e82a2dc8"
+          test "$(git -C uc-merged rev-parse HEAD:capabilities/platform-hands/shared/asset-hands/rigged-gltf-codec.js)" = "02b69b6c7368ba6e34f226ca545293d26d208922"
 
       - name: Download exact Runtime normalized-u16 evidence
         env:
@@ -77,11 +77,11 @@ jobs:
           echo "AXM_CANDIDATE=$CANDIDATE" >> "$GITHUB_ENV"
           echo "AXM_CONTROL=$CONTROL" >> "$GITHUB_ENV"
 
-      - name: Prove old rejection and repaired receiver acceptance
+      - name: Prove old rejection and merged-main receiver acceptance
         shell: bash
         env:
           OLD_CODEC: ${{ github.workspace }}/uc-old/capabilities/platform-hands/shared/asset-hands/rigged-gltf-codec.js
-          NEW_CODEC: ${{ github.workspace }}/uc-new/capabilities/platform-hands/shared/asset-hands/rigged-gltf-codec.js
+          NEW_CODEC: ${{ github.workspace }}/uc-merged/capabilities/platform-hands/shared/asset-hands/rigged-gltf-codec.js
         run: |
           set -euo pipefail
           OUT="$GITHUB_WORKSPACE/animal-ta/evidence/uc_normalized_weight_receiver_rebind"
@@ -100,8 +100,8 @@ jobs:
           const newControl = newRig.inspect(control);
           if (!oldControl.pass) throw new Error('pre-repair receiver no longer accepts exact FLOAT control: ' + oldControl.errors.join('; '));
           if (oldCandidate.pass || !oldCandidate.errors.includes('WEIGHTS_0 accessor invalid')) throw new Error('pre-repair receiver did not retain exact normalized-u16 HOLD');
-          if (!newControl.pass) throw new Error('repaired receiver regressed FLOAT control: ' + newControl.errors.join('; '));
-          if (!newCandidate.pass) throw new Error('repaired receiver rejected exact normalized-u16 candidate: ' + newCandidate.errors.join('; '));
+          if (!newControl.pass) throw new Error('merged-main receiver regressed FLOAT control: ' + newControl.errors.join('; '));
+          if (!newCandidate.pass) throw new Error('merged-main receiver rejected exact normalized-u16 candidate: ' + newCandidate.errors.join('; '));
           if (newCandidate.vertices !== 84 || newCandidate.triangles !== 80) throw new Error('candidate geometry identity changed at receiver');
           if (!newCandidate.skin || newCandidate.skin.joints !== 2) throw new Error('candidate skin joint count changed');
           if (!newCandidate.animation || newCandidate.animation.frames !== 41 || newCandidate.animation.channels !== 1) throw new Error('candidate animation identity changed');
@@ -120,8 +120,8 @@ jobs:
             deformation: inspection.deformation,
           });
           const receipt = {
-            schema: 'axm.animal-uc-normalized-weight-receiver-rebind/v0.1',
-            result: 'PASS_EXACT_RUNTIME_U16_WEIGHT_CANDIDATE_TO_BOUNDED_UC_RECEIVER',
+            schema: 'axm.animal-uc-normalized-weight-receiver-rebind/v0.2',
+            result: 'PASS_EXACT_RUNTIME_U16_WEIGHT_CANDIDATE_TO_MERGED_UC_MAIN_RECEIVER',
             technical_art_head: process.env.TA_HEAD,
             runtime_owner: {
               head: 'e7874c4a8dca1db48bc66f3546c2134f7d724456',
@@ -140,8 +140,9 @@ jobs:
               candidate: compact(oldCandidate),
             },
             receiver_after: {
-              uc_pr: 176,
-              uc_head: 'fbb75738210c676d4d76398bd3c3deb9a6dde920',
+              source_pr: 176,
+              source_pr_head: 'fbb75738210c676d4d76398bd3c3deb9a6dde920',
+              uc_main_merge_head: '9332e3455092cf8b0011fd69607d99a1e82a2dc8',
               codec_blob: '02b69b6c7368ba6e34f226ca545293d26d208922',
               control: compact(newControl),
               candidate: compact(newCandidate),
@@ -157,19 +158,20 @@ jobs:
           const out = path.join(process.env.GITHUB_WORKSPACE, 'animal-ta/evidence/uc_normalized_weight_receiver_rebind');
           fs.writeFileSync(path.join(out, 'receiver-rebind-receipt.json'), JSON.stringify(receipt, null, 2) + '\n');
           fs.writeFileSync(path.join(out, 'old-uc-inspection.json'), JSON.stringify(compact(oldCandidate), null, 2) + '\n');
-          fs.writeFileSync(path.join(out, 'new-uc-inspection.json'), JSON.stringify(compact(newCandidate), null, 2) + '\n');
+          fs.writeFileSync(path.join(out, 'merged-uc-main-inspection.json'), JSON.stringify(compact(newCandidate), null, 2) + '\n');
           NODE
-          grep -q 'PASS_EXACT_RUNTIME_U16_WEIGHT_CANDIDATE_TO_BOUNDED_UC_RECEIVER' "$OUT/receiver-rebind-receipt.json"
+          grep -q 'PASS_EXACT_RUNTIME_U16_WEIGHT_CANDIDATE_TO_MERGED_UC_MAIN_RECEIVER' "$OUT/receiver-rebind-receipt.json"
           cp "$AXM_CANDIDATE" "$OUT/runtime-candidate-u16norm-weights.glb"
           printf '%s\n' "$TA_HEAD" > "$OUT/technical-art-head.txt"
           printf '%s\n' 'e7874c4a8dca1db48bc66f3546c2134f7d724456' > "$OUT/runtime-head.txt"
-          printf '%s\n' 'fbb75738210c676d4d76398bd3c3deb9a6dde920' > "$OUT/uc-head.txt"
+          printf '%s\n' 'fbb75738210c676d4d76398bd3c3deb9a6dde920' > "$OUT/uc-source-pr-head.txt"
+          printf '%s\n' '9332e3455092cf8b0011fd69607d99a1e82a2dc8' > "$OUT/uc-main-merge-head.txt"
           printf '%s\n' '02b69b6c7368ba6e34f226ca545293d26d208922' > "$OUT/uc-codec-blob.txt"
 
-      - name: Upload exact normalized-weight receiver evidence
+      - name: Upload exact normalized-weight merged-main evidence
         uses: actions/upload-artifact@v4
         with:
-          name: animal-uc-normalized-weight-receiver-rebind-${{ github.event.pull_request.head.sha || github.sha }}
+          name: animal-uc-normalized-weight-merged-main-rebind-${{ github.event.pull_request.head.sha || github.sha }}
           path: animal-ta/evidence/uc_normalized_weight_receiver_rebind
           if-no-files-found: error
           retention-days: 30
