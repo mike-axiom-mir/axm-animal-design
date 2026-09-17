@@ -37,6 +37,8 @@ SOURCE_VERTEX_COUNT = 42
 RENDER_VERTEX_COUNT = 84
 TRIANGLE_COUNT = 80
 KEY_COUNT = 41
+UNSIGNED_BYTE = 5121
+UNSIGNED_SHORT = 5123
 
 
 @dataclass(frozen=True)
@@ -140,6 +142,21 @@ def _base_color(source_material: dict[str, Any]) -> list[float]:
     return output
 
 
+def _joint_index_payload(rows: list[list[int]]) -> tuple[bytes, int]:
+    """Pack JOINTS_0 using the smallest legal glTF unsigned component width."""
+    flat = [int(value) for value in _flatten(rows)]
+    if not flat:
+        raise ValueError("JOINTS_0 cannot be empty")
+    if min(flat) < 0:
+        raise ValueError("JOINTS_0 contains a negative joint index")
+    maximum = max(flat)
+    if maximum <= 255:
+        return struct.pack("<" + "B" * len(flat), *flat), UNSIGNED_BYTE
+    if maximum <= 65535:
+        return struct.pack("<" + "H" * len(flat), *flat), UNSIGNED_SHORT
+    raise ValueError("JOINTS_0 exceeds glTF UNSIGNED_SHORT domain")
+
+
 def maximum_expanded_owner_frame_residual(*, owner_frames: list[dict[str, Any]], packed: PackedRiggedTangentGlb) -> tuple[float, int | None]:
     if len(owner_frames) != KEY_COUNT:
         raise ValueError("exact Animation owner evidence must contain 41 authored frames")
@@ -219,11 +236,12 @@ def pack_exact_right_forelimb_rigged_tangent_glb(*, spec: dict[str, Any], plan: 
 
     pos_min = [min(row[d] for row in positions) for d in range(3)]
     pos_max = [max(row[d] for row in positions) for d in range(3)]
+    joint_payload, joint_component = _joint_index_payload(joints)
     a_pos = accessor(floats(positions), 5126, RENDER_VERTEX_COUNT, "VEC3", 34962, pos_min, pos_max)
     a_nrm = accessor(floats(normals), 5126, RENDER_VERTEX_COUNT, "VEC3", 34962)
     a_tan = accessor(floats(tangents), 5126, RENDER_VERTEX_COUNT, "VEC4", 34962)
     a_uv = accessor(floats(texcoords), 5126, RENDER_VERTEX_COUNT, "VEC2", 34962)
-    a_jnt = accessor(ushorts(joints), 5123, RENDER_VERTEX_COUNT, "VEC4", 34962)
+    a_jnt = accessor(joint_payload, joint_component, RENDER_VERTEX_COUNT, "VEC4", 34962)
     a_wgt = accessor(floats(weights), 5126, RENDER_VERTEX_COUNT, "VEC4", 34962)
     a_idx = accessor(ushorts(indices), 5123, TRIANGLE_COUNT * 3, "SCALAR", 34963)
     inverse = [_translation_matrix(0, 0, 0), _translation_matrix(-pivot[0], -pivot[1], -pivot[2])]
@@ -263,6 +281,8 @@ def pack_exact_right_forelimb_rigged_tangent_glb(*, spec: dict[str, Any], plan: 
             "authored_key_count": KEY_COUNT,
             "authored_duration_seconds": 1.0,
             "interpolation": "LINEAR",
+            "joint_index_component_type": joint_component,
+            "joint_index_width_policy": "smallest legal glTF unsigned component from exact emitted JOINTS_0 domain",
             "continuous_owner_curve_equivalence_claimed": False,
             "deformed_tangent_equivalence_claimed": False,
         }},
@@ -293,7 +313,7 @@ def decode_first_primitive(glb: bytes) -> dict[str, Any]:
         raise ValueError("GLB second chunk is not BIN")
     binary = glb[binary_at + 8:binary_at + 8 + binary_length]
     widths = {"SCALAR": 1, "VEC2": 2, "VEC3": 3, "VEC4": 4, "MAT4": 16}
-    formats = {5126: ("f", 4), 5123: ("H", 2)}
+    formats = {5126: ("f", 4), 5123: ("H", 2), 5121: ("B", 1)}
 
     def read_accessor(index: int) -> list[Any]:
         accessor_row = document["accessors"][index]
