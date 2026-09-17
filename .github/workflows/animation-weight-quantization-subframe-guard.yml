@@ -1,0 +1,74 @@
+name: Animation u16 weight subframe trajectory guard
+
+on:
+  pull_request:
+    paths:
+      - "tools/build_animation_weight_quantization_subframe_guard.py"
+      - "docs/animation_weight_quantization_subframe_guard.md"
+      - ".github/workflows/animation-weight-quantization-subframe-guard.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Run inherited Animal tests
+        run: python -m unittest discover -s tests -v
+
+      - name: Download exact retained Runtime and Rigging artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/animation-u16/runtime /tmp/animation-u16/rigging
+          curl -fL \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/actions/artifacts/10477292250/zip" \
+            -o /tmp/animation-u16/runtime.zip
+          curl -fL \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/actions/artifacts/10478912800/zip" \
+            -o /tmp/animation-u16/rigging.zip
+          echo "76455589e0dde3327f72ebff6a117a2ce12ff57edaaf1d0e61304056d03063c3  /tmp/animation-u16/runtime.zip" | sha256sum -c -
+          echo "99a48f48fe1a9c622f1f46a27370a7239df7e17a8dcf9d1c9eb0b32f6a57a088  /tmp/animation-u16/rigging.zip" | sha256sum -c -
+          unzip -q /tmp/animation-u16/runtime.zip -d /tmp/animation-u16/runtime
+          unzip -q /tmp/animation-u16/rigging.zip -d /tmp/animation-u16/rigging
+
+      - name: Audit dense transported motion against exact Runtime/Rigging evidence
+        env:
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          rm -rf evidence/animation-u16-weight-subframe-guard
+          python tools/build_animation_weight_quantization_subframe_guard.py \
+            --control-glb /tmp/animation-u16/runtime/control-f32-weights.glb \
+            --candidate-glb /tmp/animation-u16/runtime/candidate-u16norm-weights.glb \
+            --rigging-receipt /tmp/animation-u16/rigging/receipt.json \
+            --current-animation-head "$HEAD_SHA" \
+            --out evidence/animation-u16-weight-subframe-guard
+
+      - name: Upload dense subframe guard evidence
+        if: matrix.python-version == '3.11'
+        uses: actions/upload-artifact@v4
+        with:
+          name: animal-animation-u16-weight-subframe-guard
+          path: evidence/animation-u16-weight-subframe-guard
+          if-no-files-found: error
