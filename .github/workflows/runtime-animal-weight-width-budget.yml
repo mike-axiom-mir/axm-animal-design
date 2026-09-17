@@ -1,0 +1,165 @@
+name: Runtime Animal weight width budget evidence
+
+on:
+  push:
+    branches: [studio/runtime-animal-weight-width-budget-001]
+    paths:
+      - ".github/workflows/runtime-animal-weight-width-budget.yml"
+      - "src/axm_animal_design/runtime_weight_width_budget.py"
+      - "tests/test_runtime_weight_width_budget.py"
+      - "tools/build_runtime_animal_weight_width_budget.py"
+      - "tools/verify_runtime_animal_weight_width_budget.py"
+      - "evidence/godot_runtime_animal_weight_width_budget/**"
+  pull_request:
+    paths:
+      - ".github/workflows/runtime-animal-weight-width-budget.yml"
+      - "src/axm_animal_design/runtime_weight_width_budget.py"
+      - "tests/test_runtime_weight_width_budget.py"
+      - "tools/build_runtime_animal_weight_width_budget.py"
+      - "tools/verify_runtime_animal_weight_width_budget.py"
+      - "evidence/godot_runtime_animal_weight_width_budget/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  exact-animal-weight-width-budget:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout exact Runtime head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+
+      - name: Bind current Technical Art parent
+        run: |
+          set -euo pipefail
+          git rev-parse HEAD > exact-head.txt
+          test "$(git rev-parse HEAD)" = "${{ github.event.pull_request.head.sha || github.sha }}"
+          git cat-file -e 54c9c11505e798a56619ebc14e9ab41f522eef70^{commit}
+          git merge-base --is-ancestor 54c9c11505e798a56619ebc14e9ab41f522eef70 HEAD
+          test "$(git rev-parse 54c9c11505e798a56619ebc14e9ab41f522eef70:src/axm_animal_design/uc_rigged_tangent_bridge.py)" = "68acd2ad5d335a4c6bcabf3d4d0208d7123c12eb"
+          test "$(git rev-parse HEAD:src/axm_animal_design/uc_rigged_tangent_bridge.py)" = "68acd2ad5d335a4c6bcabf3d4d0208d7123c12eb"
+          unexpected="$(git diff --name-only 54c9c11505e798a56619ebc14e9ab41f522eef70..HEAD | grep -Ev '^(\.github/workflows/runtime-animal-weight-width-budget\.yml|evidence/godot_runtime_animal_weight_width_budget/project\.godot|src/axm_animal_design/runtime_weight_width_budget\.py|tests/test_runtime_weight_width_budget\.py|tools/build_runtime_animal_weight_width_budget\.py|tools/verify_runtime_animal_weight_width_budget\.py)$' || true)"
+          test -z "$unexpected" || { echo "unexpected Runtime-lane file drift: $unexpected" >&2; exit 1; }
+
+      - name: Checkout current Universal Creation receiver
+        uses: actions/checkout@v4
+        with:
+          repository: mike-axiom-mir/axm-universal-creation
+          ref: e6826acbc7296ba77d25534c8d3d3770ff3fa747
+          path: uc
+
+      - name: Verify UC receiver identities
+        run: |
+          set -euo pipefail
+          test "$(git -C uc rev-parse HEAD)" = "e6826acbc7296ba77d25534c8d3d3770ff3fa747"
+          test "$(git -C uc rev-parse HEAD:capabilities/platform-hands/shared/asset-hands/rigged-gltf-codec.js)" = "b1f2e68bb6c6800af5496decc95a8044d141edc9"
+          test "$(git -C uc rev-parse HEAD:src/axm_uc/data/engine/godot_probe.gd)" = "7784a49655192bd395e8cba6065a6dfeb809df35"
+
+      - name: Download current Technical Art producer artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p ta-evidence
+          gh api repos/${{ github.repository }}/actions/artifacts/10477320699/zip > /tmp/ta.zip
+          test "$(sha256sum /tmp/ta.zip | awk '{print $1}')" = "bc5fe4798ce0c43d04338114905ccf1ae8cd9a676800e824571b60aef9aff15b"
+          unzip -q /tmp/ta.zip -d ta-evidence
+          TA_GLB="$(find "$GITHUB_WORKSPACE/ta-evidence" -name 'animal_selected003_right_mirror_rigged_uv_tangent_41key.glb' -print -quit)"
+          test -n "$TA_GLB"
+          test "$(sha256sum "$TA_GLB" | awk '{print $1}')" = "8d9bfb80369bda09eaad786a35833cd5e04da5e608211f53648daaa1cde29566"
+          test "$(stat -c%s "$TA_GLB")" = "10948"
+          echo "AXM_TA_GLB=$TA_GLB" >> "$GITHUB_ENV"
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Compile and run inherited Animal suite
+        env:
+          PYTHONPATH: src
+        run: |
+          python -m pip install --disable-pip-version-check pillow
+          python -m compileall -q src tests tools
+          python -m unittest discover -s tests -v
+
+      - name: Build exact WEIGHTS_0 width A/B and retain current UC HOLD
+        env:
+          PYTHONPATH: src
+        run: |
+          set -euo pipefail
+          out=evidence/runtime_animal_weight_width_budget_001
+          rm -rf "$out"
+          python tools/build_runtime_animal_weight_width_budget.py --control-glb "$AXM_TA_GLB" --uc-root uc --runtime-head "$(git rev-parse HEAD)" --out-dir "$out"
+          grep -q 'HOLD_ANIMAL_WEIGHT_WIDTH_COMPACTION__CURRENT_UC_RIGGED_CODEC_FLOAT_ONLY' "$out/build-report.json"
+          grep -q 'WEIGHTS_0 accessor invalid' "$out/build-report.json"
+
+      - name: Download pinned Godot 4.7.2
+        env:
+          GODOT_URL: https://github.com/godotengine/godot-builds/releases/download/4.7.2-stable/Godot_v4.7.2-stable_linux.x86_64.zip
+          GODOT_SHA256: cadd3204e728a35d3f13adb7fd0d7902636b79f6b95c40c265eb73b6c35329e4
+        run: |
+          set -euo pipefail
+          mkdir -p .godot-bin
+          curl --fail --location --retry 3 --retry-delay 2 "$GODOT_URL" --output .godot-bin/godot.zip
+          echo "$GODOT_SHA256  .godot-bin/godot.zip" | sha256sum --check --strict
+          unzip -q .godot-bin/godot.zip -d .godot-bin
+          chmod +x .godot-bin/Godot_v4.7.2-stable_linux.x86_64
+
+      - name: Install virtual display when needed
+        run: |
+          if ! command -v xvfb-run >/dev/null 2>&1; then sudo apt-get update && sudo apt-get install -y xvfb; fi
+
+      - name: Validate Godot project
+        run: .godot-bin/Godot_v4.7.2-stable_linux.x86_64 --headless --path evidence/godot_runtime_animal_weight_width_budget --editor --quit
+
+      - name: Run real Godot control/candidate A/B
+        run: |
+          set -euo pipefail
+          out="$(pwd)/evidence/runtime_animal_weight_width_budget_001"
+          for mode in control candidate; do
+            root="$out/$mode"; mkdir -p "$root"
+            cp evidence/godot_runtime_animal_weight_width_budget/project.godot "$root/project.godot"
+            cp uc/src/axm_uc/data/engine/godot_probe.gd "$root/godot_probe.gd"
+            cp "$out/request.json" "$root/request.json"
+            if [ "$mode" = control ]; then cp "$out/control-f32-weights.glb" "$root/asset.glb"; else cp "$out/candidate-u16norm-weights.glb" "$root/asset.glb"; fi
+            xvfb-run --auto-servernum --server-args="-screen 0 1024x768x24" .godot-bin/Godot_v4.7.2-stable_linux.x86_64 --display-driver x11 --rendering-method gl_compatibility --path "$root" --script res://godot_probe.gd 2>&1 | tee "$root/godot.log"
+            test -s "$root/worker-result.json"; test -s "$root/view-00.png"; test -s "$root/view-00-coverage.png"; test -s "$root/view-01.png"; test -s "$root/view-01-coverage.png"
+            rm -rf "$root/.godot"
+          done
+
+      - name: Verify Godot evidence behind current UC HOLD
+        run: |
+          set -euo pipefail
+          out=evidence/runtime_animal_weight_width_budget_001
+          python tools/verify_runtime_animal_weight_width_budget.py --build-report "$out/build-report.json" --control-root "$out/control" --candidate-root "$out/candidate" --output "$out/report.json"
+          cp exact-head.txt "$out/exact-head.txt"
+          grep -q 'HOLD_ANIMAL_GLB_WEIGHT_WIDTH_COMPACTION__CURRENT_UC_RIGGED_CODEC_FLOAT_ONLY' "$out/report.json"
+
+      - name: Exercise fail-closed component control
+        run: |
+          set -euo pipefail
+          out=evidence/runtime_animal_weight_width_budget_001
+          cp "$out/build-report.json" "$out/build-report-mutated.json"
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          p=Path('evidence/runtime_animal_weight_width_budget_001/build-report-mutated.json'); d=json.loads(p.read_text()); d['representation']['candidate_component_type']=5126; p.write_text(json.dumps(d,indent=2,sort_keys=True)+'\n')
+          PY
+          if python tools/verify_runtime_animal_weight_width_budget.py --build-report "$out/build-report-mutated.json" --control-root "$out/control" --candidate-root "$out/candidate" --output "$out/should-not-pass.json"; then echo 'negative control unexpectedly passed' >&2; exit 1; fi
+          rm -f "$out/should-not-pass.json"
+          echo PASS_FAIL_CLOSED_WEIGHT_COMPONENT_CONTROL
+
+      - name: Upload exact Runtime evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: runtime-animal-weight-width-budget-001-${{ github.event.pull_request.head.sha || github.sha }}
+          path: evidence/runtime_animal_weight_width_budget_001
+          if-no-files-found: error
+          retention-days: 30
