@@ -1,0 +1,179 @@
+name: Materials Animal texture seam filter lookdev
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  materials-animal-texture-seam-filter-lookdev:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    strategy:
+      matrix:
+        python-version: ['3.11', '3.13']
+    steps:
+      - name: Checkout exact Materials head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          path: animal
+          fetch-depth: 0
+
+      - name: Bind existing Animal Materials direction-frame evidence
+        working-directory: animal
+        run: |
+          git merge-base --is-ancestor 35808c9a5a8906a478ee28e5b6a04e34113ac28c HEAD
+          test "$(git hash-object tools/build_animal_transported_frame_lookdev_payload.py)" = "95e7fd2be569460789303b491ea876aecce6ad3a"
+          test "$(git hash-object evidence/godot_animal_transported_frame_lookdev/render_review.gd)" = "c8b0ad2d20cb593085aa75759fa9e1b7ac782545"
+
+      - name: Checkout exact Rigging reconstruction owner
+        uses: actions/checkout@v4
+        with:
+          repository: mike-axiom-mir/axm-animal-design
+          ref: 81ab44eab2e13bed95187610a476be2b2c4667a7
+          path: rigging-owner
+          fetch-depth: 1
+
+      - name: Verify exact Rigging reconstruction owner
+        run: |
+          test "$(git -C rigging-owner rev-parse HEAD)" = "81ab44eab2e13bed95187610a476be2b2c4667a7"
+          test "$(git -C rigging-owner hash-object src/axm_animal_design/transported_frame_reconstruction_constraint.py)" = "c9916c62e2081922b8eb7ec0b3cd1c25c019b2f6"
+          test "$(git -C rigging-owner hash-object src/axm_animal_design/transported_tangent_deformation_audit.py)" = "42f31fc5cb95426e89d22b5ed6c2b0983a22326d"
+
+      - name: Checkout exact Rigging plan and weighting-profile donor
+        uses: actions/checkout@v4
+        with:
+          repository: mike-axiom-mir/axm-animal-design
+          ref: 04760112deb81a8d145226fe7ee02923107c9916
+          path: rig-donor
+          fetch-depth: 1
+
+      - name: Verify exact Rigging plan donor
+        run: test "$(git -C rig-donor rev-parse HEAD)" = "04760112deb81a8d145226fe7ee02923107c9916"
+
+      - name: Download and verify exact retained Technical Art transport artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          rm -rf ta-evidence /tmp/axm-ta.zip
+          mkdir -p ta-evidence
+          gh api repos/${{ github.repository }}/actions/artifacts/10474385703/zip > /tmp/axm-ta.zip
+          test "$(sha256sum /tmp/axm-ta.zip | awk '{print $1}')" = "7fc2a7f5d745da593e8762efa98e13661f84a057b1eb60921d576c366e71d7bb"
+          unzip -q /tmp/axm-ta.zip -d ta-evidence
+          TA_GLB="$(find "$GITHUB_WORKSPACE/ta-evidence" -name 'animal_selected003_right_mirror_rigged_uv_tangent_41key.glb' -print -quit)"
+          TA_RECEIPT="$(find "$GITHUB_WORKSPACE/ta-evidence" -name 'uc_rigged_uv_tangent_transport_receipt.json' -print -quit)"
+          test -n "$TA_GLB"
+          test -n "$TA_RECEIPT"
+          test "$(sha256sum "$TA_GLB" | awk '{print $1}')" = "ecb122e3274929c3d99bc8e29a472aaa2657bcb16b13331a4f1972bb6ec6b493"
+          echo "AXM_TA_GLB=$TA_GLB" >> "$GITHUB_ENV"
+          echo "AXM_TA_RECEIPT=$TA_RECEIPT" >> "$GITHUB_ENV"
+          echo "AXM_RIG_PLAN=$GITHUB_WORKSPACE/rig-donor/examples/quadruped_rig_probe_001.json" >> "$GITHUB_ENV"
+          echo "AXM_WEIGHTING_PROFILE=$GITHUB_WORKSPACE/rig-donor/examples/quadruped_weighting_refinement_001.json" >> "$GITHUB_ENV"
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Compile Materials additions
+        working-directory: animal
+        run: python -m compileall -q tools
+
+      - name: Run inherited Animal suite
+        working-directory: animal
+        env:
+          PYTHONPATH: src
+          AXM_RIG_PLAN: ../rig-donor/examples/quadruped_rig_probe_001.json
+          AXM_WEIGHTING_PROFILE: ../rig-donor/examples/quadruped_weighting_refinement_001.json
+        run: python -m unittest discover -s tests -v
+
+      - name: Install image verifier dependency
+        if: matrix.python-version == '3.11'
+        run: python -m pip install --disable-pip-version-check pillow
+
+      - name: Setup Godot target host
+        if: matrix.python-version == '3.11'
+        uses: chickensoft-games/setup-godot@v2
+        with:
+          version: 4.7.2
+          use-dotnet: false
+          include-templates: false
+
+      - name: Install virtual display when needed
+        if: matrix.python-version == '3.11'
+        run: |
+          if ! command -v xvfb-run >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y xvfb
+          fi
+
+      - name: Build exact reconstructed-frame texture-filter payload
+        if: matrix.python-version == '3.11'
+        working-directory: animal
+        env:
+          PYTHONPATH: ../rigging-owner/src
+        run: |
+          rm -rf evidence/materials-animal-texture-seam-filter-lookdev-001
+          mkdir -p evidence/materials-animal-texture-seam-filter-lookdev-001/renders
+          python tools/build_animal_transported_frame_lookdev_payload.py \
+            --source ../rigging-owner/examples/quadruped_neutral_001.json \
+            --left-profile ../rigging-owner/examples/quadruped_elbow_source_successor_003.json \
+            --bilateral-profile ../rigging-owner/examples/quadruped_elbow_bilateral_successor_003.json \
+            --rig-plan "$AXM_RIG_PLAN" \
+            --weighting-profile "$AXM_WEIGHTING_PROFILE" \
+            --technical-art-receipt "$AXM_TA_RECEIPT" \
+            --technical-art-glb "$AXM_TA_GLB" \
+            --rigging-reconstruction-head 81ab44eab2e13bed95187610a476be2b2c4667a7 \
+            --rigging-reconstruction-module-blob c9916c62e2081922b8eb7ec0b3cd1c25c019b2f6 \
+            --rigging-transport-audit-module-blob 42f31fc5cb95426e89d22b5ed6c2b0983a22326d \
+            --out evidence/materials-animal-texture-seam-filter-lookdev-001/review-payload.json
+          grep -q 'PASS_TRANSPORTED_POST_SKIN_OWNER_FRAME_RECONSTRUCTION_41_KEYS' evidence/materials-animal-texture-seam-filter-lookdev-001/review-payload.json
+
+      - name: Validate Godot texture-seam lookdev project
+        if: matrix.python-version == '3.11'
+        working-directory: animal
+        run: godot --headless --path evidence/godot_animal_texture_seam_filter_lookdev --editor --quit
+
+      - name: Capture exact target-host texture seam/filter A/B
+        if: matrix.python-version == '3.11'
+        working-directory: animal
+        run: |
+          set -euo pipefail
+          timeout 300s xvfb-run --auto-servernum --server-args="-screen 0 960x720x24" \
+            godot \
+            --display-driver x11 \
+            --rendering-method gl_compatibility \
+            --path evidence/godot_animal_texture_seam_filter_lookdev -- \
+            --payload "$(pwd)/evidence/materials-animal-texture-seam-filter-lookdev-001/review-payload.json" \
+            --out-dir "$(pwd)/evidence/materials-animal-texture-seam-filter-lookdev-001/renders"
+
+      - name: Verify and summarize texture seam/filter evidence
+        if: matrix.python-version == '3.11'
+        working-directory: animal
+        run: |
+          python tools/verify_animal_texture_seam_filter_lookdev.py \
+            --payload evidence/materials-animal-texture-seam-filter-lookdev-001/review-payload.json \
+            --telemetry evidence/materials-animal-texture-seam-filter-lookdev-001/target-host-telemetry.json \
+            --renders evidence/materials-animal-texture-seam-filter-lookdev-001/renders \
+            --materials-head "$(git rev-parse HEAD)" \
+            --out evidence/materials-animal-texture-seam-filter-lookdev-001/materials-texture-seam-filter-evidence.json
+          git rev-parse HEAD > evidence/materials-animal-texture-seam-filter-lookdev-001/exact-materials-head.txt
+          printf '%s\n' '81ab44eab2e13bed95187610a476be2b2c4667a7' > evidence/materials-animal-texture-seam-filter-lookdev-001/exact-rigging-reconstruction-head.txt
+          printf '%s\n' 'ecb122e3274929c3d99bc8e29a472aaa2657bcb16b13331a4f1972bb6ec6b493' > evidence/materials-animal-texture-seam-filter-lookdev-001/exact-technical-art-glb-sha256.txt
+          cat > evidence/materials-animal-texture-seam-filter-lookdev-001/README.txt <<'EOF'
+          Materials / LookDev texture-seam receiving evidence only.
+          Exact reconstructed positions/normals/tangents, topology, UVs, lights and cameras are frozen. The self-generated periodic tangent-space normal texture is compared with the same base texels without mip filtering and with an explicit U-edge discontinuity negative under real Godot GL Compatibility sampling.
+          This does not establish a production Animal normal map, final UV packing/texel density, all-level mip wrap perfection, Technical-Art/Runtime adoption, final Art/QA acceptance, CANON or production readiness.
+          EOF
+
+      - name: Upload exact Materials texture seam/filter evidence
+        if: ${{ always() && matrix.python-version == '3.11' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: animal-materials-texture-seam-filter-lookdev-${{ github.event.pull_request.head.sha || github.sha }}
+          path: animal/evidence/materials-animal-texture-seam-filter-lookdev-001
+          if-no-files-found: error
+          retention-days: 30
