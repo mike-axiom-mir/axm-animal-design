@@ -1,0 +1,265 @@
+name: Runtime Animal direction-frame ArrayMesh reuse evidence
+
+on:
+  pull_request:
+    paths:
+      - "tools/godot_runtime_direction_frame_mesh_reuse_probe.gd"
+      - "tools/verify_runtime_direction_frame_mesh_reuse.py"
+      - "docs/runtime_direction_frame_mesh_reuse.md"
+      - ".github/workflows/runtime-animal-direction-frame-mesh-reuse.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  runtime-animal-direction-frame-mesh-reuse:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout exact Runtime head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          path: animal-runtime
+          fetch-depth: 0
+
+      - name: Bind exact green Technical Art target-host predecessor
+        working-directory: animal-runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          RUNTIME_HEAD="$(git rev-parse HEAD)"
+          echo "RUNTIME_HEAD=$RUNTIME_HEAD" >> "$GITHUB_ENV"
+          git merge-base --is-ancestor 43e2cf0ddf3096c665aa7c29b4393dcafdd26114 HEAD
+          test "$(git hash-object src/axm_animal_design/uc_direction_frame_target_host_adapter.py)" = "f6a726edfc0652f09aac661afa07e2fbdc2e21b7"
+          test "$(git hash-object tools/build_uc_direction_frame_target_host_adapter_evidence.py)" = "2858c9761820d27f478e1a464ecca2ef3e79d375"
+          test "$(git hash-object tools/godot_direction_frame_target_host_probe.gd)" = "2d60acf41d08054583f34fe8d5c6904860b477e7"
+          test "$(git hash-object .github/workflows/uc-direction-frame-target-host-adapter.yml)" = "d8f356cecdae1c120ca2e4ded0302db19cb41e39"
+
+      - name: Bind exact successful Technical Art target-host evidence
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/ta-target-host"
+          gh api repos/mike-axiom-mir/axm-animal-design/actions/artifacts/10509802878/zip > "$RUNNER_TEMP/ta-target-host.zip"
+          echo "912a1c391edc51ef5a3e2ac2dfc0344bc400f2606fe7f3eabf2c1424cf4faddc  $RUNNER_TEMP/ta-target-host.zip" | sha256sum -c -
+          unzip -q "$RUNNER_TEMP/ta-target-host.zip" -d "$RUNNER_TEMP/ta-target-host"
+          TA_TARGET_HOST_RECEIPT="$(find "$RUNNER_TEMP/ta-target-host" -name 'godot-arraymesh-target-host-receipt.json' -print -quit)"
+          test -n "$TA_TARGET_HOST_RECEIPT"
+          grep -q 'PASS_TECHNICAL_ART_GODOT_ARRAYMESH_OWNER_RECONSTRUCTED_FRAME_41_KEYS_RIGHT' "$TA_TARGET_HOST_RECEIPT"
+          echo "TA_TARGET_HOST_RECEIPT=$TA_TARGET_HOST_RECEIPT" >> "$GITHUB_ENV"
+
+      - name: Checkout exact Rigging reconstruction owner
+        uses: actions/checkout@v4
+        with:
+          repository: mike-axiom-mir/axm-animal-design
+          ref: 81ab44eab2e13bed95187610a476be2b2c4667a7
+          path: rigging-owner
+          fetch-depth: 1
+
+      - name: Verify exact Rigging owner identities
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C rigging-owner rev-parse HEAD)" = "81ab44eab2e13bed95187610a476be2b2c4667a7"
+          test "$(git -C rigging-owner hash-object src/axm_animal_design/transported_frame_reconstruction_constraint.py)" = "c9916c62e2081922b8eb7ec0b3cd1c25c019b2f6"
+          test "$(git -C rigging-owner hash-object src/axm_animal_design/transported_tangent_deformation_audit.py)" = "42f31fc5cb95426e89d22b5ed6c2b0983a22326d"
+          test "$(git -C rigging-owner hash-object src/axm_animal_design/bilateral_deformed_tangent_frames.py)" = "fbade964b3305d70775d196232ad2cd4671d0eac"
+          test "$(git -C rigging-owner hash-object src/axm_animal_design/bilateral_uv_tangent_basis.py)" = "ba0b4e620f132413606177358e47bd32ae4d4965"
+
+      - name: Download exact adopted reconstruction contract
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/adoption"
+          gh api repos/mike-axiom-mir/axm-animal-design/actions/artifacts/10506183243/zip > "$RUNNER_TEMP/adoption.zip"
+          echo "58d4f4f35bccdcc24deb4eb624279070cc9eb52d54c97b2fba6ff4cbe7da1973  $RUNNER_TEMP/adoption.zip" | sha256sum -c -
+          unzip -q "$RUNNER_TEMP/adoption.zip" -d "$RUNNER_TEMP/adoption"
+          ADOPTION_RECEIPT="$(find "$RUNNER_TEMP/adoption" -name 'uc_direction_frame_reconstruction_contract_evidence.json' -print -quit)"
+          test -n "$ADOPTION_RECEIPT"
+          grep -q 'PASS_POST_SKIN_OWNER_FRAME_RECONSTRUCTION_CONTRACT_ADOPTED__HOLD_TARGET_RUNTIME_IMPLEMENTATION' "$ADOPTION_RECEIPT"
+          grep -q '"target_runtime_implemented": false' "$ADOPTION_RECEIPT"
+          echo "ADOPTION_RECEIPT=$ADOPTION_RECEIPT" >> "$GITHUB_ENV"
+
+      - name: Download exact source Technical Art rigged transport
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/source-ta"
+          gh api repos/mike-axiom-mir/axm-animal-design/actions/artifacts/10474385703/zip > "$RUNNER_TEMP/source-ta.zip"
+          echo "7fc2a7f5d745da593e8762efa98e13661f84a057b1eb60921d576c366e71d7bb  $RUNNER_TEMP/source-ta.zip" | sha256sum -c -
+          unzip -q "$RUNNER_TEMP/source-ta.zip" -d "$RUNNER_TEMP/source-ta"
+          SOURCE_GLB="$(find "$RUNNER_TEMP/source-ta" -name 'animal_selected003_right_mirror_rigged_uv_tangent_41key.glb' -print -quit)"
+          SOURCE_RECEIPT="$(find "$RUNNER_TEMP/source-ta" -name 'uc_rigged_uv_tangent_transport_receipt.json' -print -quit)"
+          test -n "$SOURCE_GLB"
+          test -n "$SOURCE_RECEIPT"
+          test "$(sha256sum "$SOURCE_GLB" | awk '{print $1}')" = "ecb122e3274929c3d99bc8e29a472aaa2657bcb16b13331a4f1972bb6ec6b493"
+          echo "SOURCE_GLB=$SOURCE_GLB" >> "$GITHUB_ENV"
+          echo "SOURCE_RECEIPT=$SOURCE_RECEIPT" >> "$GITHUB_ENV"
+
+      - name: Checkout exact current Universal Creation generic receiver
+        uses: actions/checkout@v4
+        with:
+          repository: mike-axiom-mir/axm-universal-creation
+          ref: 50e85c8f6a39822eef01e4fb546dcb875917bb3b
+          path: uc-current
+          fetch-depth: 1
+
+      - name: Bind unchanged Universal Creation receiver
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C uc-current rev-parse HEAD)" = "50e85c8f6a39822eef01e4fb546dcb875917bb3b"
+          test "$(git -C uc-current hash-object capabilities/platform-hands/shared/asset-hands/rigged-gltf-codec.js)" = "02b69b6c7368ba6e34f226ca545293d26d208922"
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Preserve exact Technical Art receiving contract tests
+        working-directory: animal-runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m compileall -q src tests tools
+          PYTHONPATH=src python -m unittest discover -s tests -p 'test_uc_direction_frame_target_host_adapter.py' -v
+
+      - name: Build the exact Technical Art all-key target-host packet unchanged
+        working-directory: animal-runtime
+        env:
+          PYTHONPATH: src
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf evidence/runtime-animal-direction-frame-mesh-reuse-001
+          mkdir -p evidence/runtime-animal-direction-frame-mesh-reuse-001/technical-art
+          python tools/build_uc_direction_frame_target_host_adapter_evidence.py \
+            --contract-receipt "$ADOPTION_RECEIPT" \
+            --rigging-root "$GITHUB_WORKSPACE/rigging-owner" \
+            --source-glb "$SOURCE_GLB" \
+            --technical-art-head 43e2cf0ddf3096c665aa7c29b4393dcafdd26114 \
+            --uc-root "$GITHUB_WORKSPACE/uc-current" \
+            --uc-head 50e85c8f6a39822eef01e4fb546dcb875917bb3b \
+            --uc-codec-blob 02b69b6c7368ba6e34f226ca545293d26d208922 \
+            --out evidence/runtime-animal-direction-frame-mesh-reuse-001/technical-art
+          grep -q 'PASS_OWNER_RECONSTRUCTION_TO_TECHNICAL_ART_TARGET_HOST_PACKET_READY' \
+            evidence/runtime-animal-direction-frame-mesh-reuse-001/technical-art/technical-art-target-host-build-receipt.json
+          grep -q 'READY_TECHNICAL_ART_TARGET_HOST_REFERENCE_IMPLEMENTATION__HOLD_RUNTIME_PRODUCT_IMPLEMENTATION' \
+            evidence/runtime-animal-direction-frame-mesh-reuse-001/technical-art/technical-art-target-host-packet.json
+
+      - name: Setup exact Godot proof host
+        uses: chickensoft-games/setup-godot@v2
+        with:
+          version: 4.7.2
+          use-dotnet: false
+          include-templates: false
+
+      - name: Re-prove the unchanged Technical Art target-host baseline first
+        working-directory: animal-runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          godot --headless \
+            --script tools/godot_direction_frame_target_host_probe.gd -- \
+            --payload "$(pwd)/evidence/runtime-animal-direction-frame-mesh-reuse-001/technical-art/technical-art-target-host-packet.json" \
+            --out "$(pwd)/evidence/runtime-animal-direction-frame-mesh-reuse-001/technical-art-baseline-receipt.json"
+          grep -q 'PASS_TECHNICAL_ART_GODOT_ARRAYMESH_OWNER_RECONSTRUCTED_FRAME_41_KEYS_RIGHT' \
+            evidence/runtime-animal-direction-frame-mesh-reuse-001/technical-art-baseline-receipt.json
+          grep -q '"runtime_product_implementation_established": false' \
+            evidence/runtime-animal-direction-frame-mesh-reuse-001/technical-art-baseline-receipt.json
+
+      - name: Measure stable ArrayMesh resource identity against the exact baseline
+        working-directory: animal-runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          godot --headless \
+            --script tools/godot_runtime_direction_frame_mesh_reuse_probe.gd -- \
+            --payload "$(pwd)/evidence/runtime-animal-direction-frame-mesh-reuse-001/technical-art/technical-art-target-host-packet.json" \
+            --out "$(pwd)/evidence/runtime-animal-direction-frame-mesh-reuse-001/runtime-mesh-reuse-result.json"
+          python tools/verify_runtime_direction_frame_mesh_reuse.py \
+            evidence/runtime-animal-direction-frame-mesh-reuse-001/runtime-mesh-reuse-result.json
+
+      - name: Fail closed if resource construction reduction is relabelled away
+        working-directory: animal-runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          source = Path('evidence/runtime-animal-direction-frame-mesh-reuse-001/runtime-mesh-reuse-result.json')
+          mutated = json.loads(source.read_text(encoding='utf-8'))
+          mutated['after']['arraymesh_resource_constructions_per_41_key_playback'] = 41
+          out = Path('/tmp/runtime-mesh-reuse-mutated.json')
+          out.write_text(json.dumps(mutated, indent=2, sort_keys=True) + '\n', encoding='utf-8')
+          PY
+          if python tools/verify_runtime_direction_frame_mesh_reuse.py /tmp/runtime-mesh-reuse-mutated.json; then
+            echo 'mutated resource-construction count unexpectedly passed' >&2
+            exit 1
+          fi
+
+      - name: Retain exact identity, metrics and truth boundary
+        working-directory: animal-runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf '%s\n' "$RUNTIME_HEAD" > evidence/runtime-animal-direction-frame-mesh-reuse-001/exact-runtime-head.txt
+          printf '%s\n' '43e2cf0ddf3096c665aa7c29b4393dcafdd26114' > evidence/runtime-animal-direction-frame-mesh-reuse-001/exact-technical-art-target-host-head.txt
+          printf '%s\n' '35251459815' > evidence/runtime-animal-direction-frame-mesh-reuse-001/exact-technical-art-target-host-workflow.txt
+          printf '%s\n' '10509802878' > evidence/runtime-animal-direction-frame-mesh-reuse-001/exact-technical-art-target-host-artifact.txt
+          printf '%s\n' '912a1c391edc51ef5a3e2ac2dfc0344bc400f2606fe7f3eabf2c1424cf4faddc' > evidence/runtime-animal-direction-frame-mesh-reuse-001/exact-technical-art-target-host-artifact-sha256.txt
+          printf '%s\n' '81ab44eab2e13bed95187610a476be2b2c4667a7' > evidence/runtime-animal-direction-frame-mesh-reuse-001/exact-rigging-owner-head.txt
+          printf '%s\n' 'ecb122e3274929c3d99bc8e29a472aaa2657bcb16b13331a4f1972bb6ec6b493' > evidence/runtime-animal-direction-frame-mesh-reuse-001/exact-source-glb-sha256.txt
+          printf '%s\n' '50e85c8f6a39822eef01e4fb546dcb875917bb3b' > evidence/runtime-animal-direction-frame-mesh-reuse-001/exact-uc-head.txt
+          cp "$TA_TARGET_HOST_RECEIPT" evidence/runtime-animal-direction-frame-mesh-reuse-001/exact-green-technical-art-target-host-receipt.json
+          cp "$ADOPTION_RECEIPT" evidence/runtime-animal-direction-frame-mesh-reuse-001/exact-adopted-reconstruction-contract.json
+          cp "$SOURCE_RECEIPT" evidence/runtime-animal-direction-frame-mesh-reuse-001/exact-source-transport-receipt.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          root = Path('evidence/runtime-animal-direction-frame-mesh-reuse-001')
+          result = json.loads((root / 'runtime-mesh-reuse-result.json').read_text(encoding='utf-8'))
+          timing = result['proof_host_timing']
+          readback = result['readback']
+          summary = {
+              'state': result['state'],
+              'before_arraymesh_constructions': result['before']['arraymesh_resource_constructions_per_41_key_playback'],
+              'after_arraymesh_constructions': result['after']['arraymesh_resource_constructions_per_41_key_playback'],
+              'resource_construction_reduction_percent': result['after']['resource_construction_reduction_percent'],
+              'baseline_median_sweep_us': timing['baseline_median_sweep_us'],
+              'candidate_median_sweep_us': timing['candidate_median_sweep_us'],
+              'candidate_minus_baseline_percent': timing['candidate_minus_baseline_percent'],
+              'baseline_p95_sweep_us': timing['baseline_p95_sweep_us'],
+              'candidate_p95_sweep_us': timing['candidate_p95_sweep_us'],
+              'baseline_readback': readback['baseline'],
+              'candidate_readback': readback['candidate'],
+              'visual_tradeoff': readback['visual_tradeoff'],
+              'direction_angle_metric': readback['direction_angle_metric'],
+              'direction_angle_metric_self_check_deg': readback['direction_angle_metric_self_check_deg'],
+          }
+          (root / 'runtime-mesh-reuse-summary.json').write_text(json.dumps(summary, indent=2, sort_keys=True) + '\n', encoding='utf-8')
+          print(json.dumps(summary, sort_keys=True))
+          PY
+          cat > evidence/runtime-animal-direction-frame-mesh-reuse-001/README.txt <<'EOF'
+          Runtime / Optimization evidence only.
+          Baseline is the exact green Technical Art Godot 4.7.2 target-host reference at 43e2cf0ddf3096c665aa7c29b4393dcafdd26114: one fresh ArrayMesh per owner-reconstructed authored key. Candidate preserves one ArrayMesh object identity and rebuilds the same one surface for each of the same 41 frames. All frame arrays come unchanged from the exact Technical Art packet and are read back with the same receiving tolerances. The direction-angle evidence metric is the same stable near-parallel atan2 form used by the green Technical Art receiver; thresholds are unchanged.
+          This proves no dynamic vertex/attribute region update, no surface-buffer reuse, no bilateral or continuous playback, no fresh shaded equivalence, no target-device CPU/GPU/FPS/VRAM, no Art/QA acceptance, no UC product change, no CANON and no production readiness.
+          EOF
+
+      - name: Upload exact Runtime target-host lifecycle evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: animal-runtime-direction-frame-mesh-reuse-${{ github.event.pull_request.head.sha || github.sha }}
+          path: animal-runtime/evidence/runtime-animal-direction-frame-mesh-reuse-001
+          if-no-files-found: warn
+          retention-days: 30

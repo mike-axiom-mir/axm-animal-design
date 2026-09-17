@@ -1,0 +1,219 @@
+name: Runtime Animal persistent dynamic-render repair evidence
+
+on:
+  pull_request:
+    paths:
+      - "tools/godot_runtime_direction_frame_dynamic_render_probe.gd"
+      - "tools/godot_runtime_direction_frame_dynamic_render_probe_v2.gd"
+      - "tools/verify_runtime_direction_frame_dynamic_render.py"
+      - ".github/workflows/runtime-animal-direction-frame-dynamic-render-repair.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  runtime-animal-persistent-dynamic-render-repair:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout exact Runtime head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          path: animal-runtime
+          fetch-depth: 0
+
+      - name: Bind Runtime lineage and harness-only repair
+        working-directory: animal-runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          RUNTIME_HEAD="$(git rev-parse HEAD)"
+          echo "RUNTIME_HEAD=$RUNTIME_HEAD" >> "$GITHUB_ENV"
+          git merge-base --is-ancestor 9db88b7629df025be1c157c19ca258e3ff0ce483 HEAD
+          git merge-base --is-ancestor 050a4675d550312c533cea5fa24e5897ca32e8e0 HEAD
+          test -f tools/godot_runtime_direction_frame_dynamic_render_probe_v2.gd
+          grep -q 'Harness-only repair' tools/godot_runtime_direction_frame_dynamic_render_probe_v2.gd
+
+      - name: Checkout exact current Technical Art receiver owner
+        uses: actions/checkout@v4
+        with:
+          repository: mike-axiom-mir/axm-animal-design
+          ref: 1ca28d29c7e1aaa095c11aaa6085716669230cb3
+          path: animal-ta-current
+          fetch-depth: 1
+
+      - name: Download exact current Technical Art and UC continuity evidence
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C animal-ta-current rev-parse HEAD)" = "1ca28d29c7e1aaa095c11aaa6085716669230cb3"
+          mkdir -p "$RUNNER_TEMP/ta-current" "$RUNNER_TEMP/uc-closure"
+          gh api repos/mike-axiom-mir/axm-animal-design/actions/artifacts/10514887379/zip > "$RUNNER_TEMP/ta-current.zip"
+          echo "50ece0d05336e85662c9b1753d0ff5c42699c96f4e1e5a310a49e320895bfa60  $RUNNER_TEMP/ta-current.zip" | sha256sum -c -
+          unzip -q "$RUNNER_TEMP/ta-current.zip" -d "$RUNNER_TEMP/ta-current"
+          TA_PACKET="$(find "$RUNNER_TEMP/ta-current" -name 'technical-art-target-host-packet.json' -print -quit)"
+          TA_RECEIPT="$(find "$RUNNER_TEMP/ta-current" -name 'godot-arraymesh-target-host-receipt.json' -print -quit)"
+          test -n "$TA_PACKET" && test -n "$TA_RECEIPT"
+          grep -q 'PASS_TECHNICAL_ART_GODOT_ARRAYMESH_OWNER_RECONSTRUCTED_FRAME_41_KEYS_RIGHT' "$TA_RECEIPT"
+          echo "TA_PACKET=$TA_PACKET" >> "$GITHUB_ENV"
+          echo "TA_RECEIPT=$TA_RECEIPT" >> "$GITHUB_ENV"
+          gh api repos/mike-axiom-mir/axm-animal-design/actions/artifacts/10514528544/zip > "$RUNNER_TEMP/uc-closure.zip"
+          echo "8b7d65539251f2ac3b8c35c125916438072383befeae0564565fdc1a3edf20f9  $RUNNER_TEMP/uc-closure.zip" | sha256sum -c -
+          unzip -q "$RUNNER_TEMP/uc-closure.zip" -d "$RUNNER_TEMP/uc-closure"
+          grep -R -q 'PASS_CURRENT_UC_RIGGED_RECEIVER_DEPENDENCY_CLOSURE_IDENTICAL_TO_TESTED_RECEIVER' "$RUNNER_TEMP/uc-closure"
+          grep -R -q '452b179cccff8acdde8930f7bde8662e52f86949' "$RUNNER_TEMP/uc-closure"
+
+      - name: Preserve failed predecessors and failed render harness
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          for spec in \
+            '10516719596 a00a9af5192bc7c923e1f4a1891faa7880a3c47eec263d82c1e04e664eaf7413 failed-v1' \
+            '10518260489 3c2c5ae33fc0706994aff24fbb491e54d175fe0826411fae6136dd8a8735a83c failed-v2' \
+            '10517816717 f4fccfa5e47787c27da4b2558e48aca98cb3734e0bc63bcdc5f2dbf976ac9eb4 failed-render-harness'; do
+            set -- $spec
+            gh api repos/mike-axiom-mir/axm-animal-design/actions/artifacts/$1/zip > "$RUNNER_TEMP/$3.zip"
+            echo "$2  $RUNNER_TEMP/$3.zip" | sha256sum -c -
+            mkdir -p "$RUNNER_TEMP/$3"
+            unzip -q "$RUNNER_TEMP/$3.zip" -d "$RUNNER_TEMP/$3"
+          done
+          grep -q 'HOLD_ANIMAL_GODOT_DYNAMIC_VERTEX_DIRECTION_REGION_UPDATE' "$RUNNER_TEMP/failed-v1/runtime-dynamic-region-result.json"
+          grep -q 'HOLD_ANIMAL_GODOT_ENGINE_PACKED_VERTEX_REGION_UPDATE' "$RUNNER_TEMP/failed-v2/runtime-engine-packed-region-result.json"
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Compile Runtime verifier
+        working-directory: animal-runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m py_compile tools/verify_runtime_direction_frame_dynamic_render.py
+
+      - name: Setup exact Godot proof host
+        uses: chickensoft-games/setup-godot@v2
+        with:
+          version: 4.7.2
+          use-dotnet: false
+          include-templates: false
+
+      - name: Re-prove current Technical Art target-host packet first
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p animal-runtime/evidence/runtime-animal-direction-frame-dynamic-render-002
+          godot --headless \
+            --script animal-ta-current/tools/godot_direction_frame_target_host_probe.gd -- \
+            --payload "$TA_PACKET" \
+            --out "$GITHUB_WORKSPACE/animal-runtime/evidence/runtime-animal-direction-frame-dynamic-render-002/current-ta-baseline-receipt.json"
+          grep -q 'PASS_TECHNICAL_ART_GODOT_ARRAYMESH_OWNER_RECONSTRUCTED_FRAME_41_KEYS_RIGHT' \
+            animal-runtime/evidence/runtime-animal-direction-frame-dynamic-render-002/current-ta-baseline-receipt.json
+
+      - name: Measure persistent vertex buffer through repaired rendered observer
+        working-directory: animal-runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p evidence/runtime-animal-direction-frame-dynamic-render-002/images
+          xvfb-run -a godot --rendering-method gl_compatibility --audio-driver Dummy \
+            --script tools/godot_runtime_direction_frame_dynamic_render_probe_v2.gd -- \
+            --payload "$TA_PACKET" \
+            --out "$(pwd)/evidence/runtime-animal-direction-frame-dynamic-render-002/runtime-dynamic-render-result.json" \
+            --image-dir "$(pwd)/evidence/runtime-animal-direction-frame-dynamic-render-002/images"
+          python tools/verify_runtime_direction_frame_dynamic_render.py \
+            evidence/runtime-animal-direction-frame-dynamic-render-002/runtime-dynamic-render-result.json
+
+      - name: Fail closed if rendered identity is weakened
+        working-directory: animal-runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          source = Path('evidence/runtime-animal-direction-frame-dynamic-render-002/runtime-dynamic-render-result.json')
+          mutated = json.loads(source.read_text(encoding='utf-8'))
+          mutated['render_equivalence']['byte_identical_pairs'] = 40
+          mutated['render_equivalence']['total_changed_pixels'] = 1
+          out = Path('/tmp/runtime-dynamic-render-mutated.json')
+          out.write_text(json.dumps(mutated, indent=2, sort_keys=True) + '\n', encoding='utf-8')
+          PY
+          if python tools/verify_runtime_direction_frame_dynamic_render.py /tmp/runtime-dynamic-render-mutated.json; then
+            echo 'mutated render identity unexpectedly passed' >&2
+            exit 1
+          fi
+
+      - name: Retain exact identities metrics and tradeoffs
+        working-directory: animal-runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          ROOT=evidence/runtime-animal-direction-frame-dynamic-render-002
+          printf '%s\n' "$RUNTIME_HEAD" > "$ROOT/exact-runtime-head.txt"
+          printf '%s\n' '9db88b7629df025be1c157c19ca258e3ff0ce483' > "$ROOT/pass40-runtime-head.txt"
+          printf '%s\n' '1ca28d29c7e1aaa095c11aaa6085716669230cb3' > "$ROOT/exact-current-technical-art-head.txt"
+          printf '%s\n' '10514887379' > "$ROOT/current-technical-art-artifact.txt"
+          printf '%s\n' '50ece0d05336e85662c9b1753d0ff5c42699c96f4e1e5a310a49e320895bfa60' > "$ROOT/current-technical-art-artifact-sha256.txt"
+          printf '%s\n' '10514528544' > "$ROOT/current-uc-closure-artifact.txt"
+          printf '%s\n' '8b7d65539251f2ac3b8c35c125916438072383befeae0564565fdc1a3edf20f9' > "$ROOT/current-uc-closure-artifact-sha256.txt"
+          printf '%s\n' '452b179cccff8acdde8930f7bde8662e52f86949' > "$ROOT/current-uc-head-proven-by-closure.txt"
+          printf '%s\n' '10516719596 a00a9af5192bc7c923e1f4a1891faa7880a3c47eec263d82c1e04e664eaf7413' > "$ROOT/failed-v1-artifact.txt"
+          printf '%s\n' '10518260489 3c2c5ae33fc0706994aff24fbb491e54d175fe0826411fae6136dd8a8735a83c' > "$ROOT/failed-v2-artifact.txt"
+          printf '%s\n' '10517816717 f4fccfa5e47787c27da4b2558e48aca98cb3734e0bc63bcdc5f2dbf976ac9eb4' > "$ROOT/failed-render-harness-artifact.txt"
+          cp "$TA_RECEIPT" "$ROOT/exact-current-technical-art-target-host-receipt.json"
+          cp "$TA_PACKET" "$ROOT/exact-current-technical-art-target-host-packet.json"
+          cp "$RUNNER_TEMP/failed-v1/runtime-dynamic-region-result.json" "$ROOT/failed-v1-result.json"
+          cp "$RUNNER_TEMP/failed-v2/runtime-engine-packed-region-result.json" "$ROOT/failed-v2-result.json"
+          cp -R "$RUNNER_TEMP/uc-closure" "$ROOT/current-uc-receiver-dependency-closure"
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          root = Path('evidence/runtime-animal-direction-frame-dynamic-render-002')
+          r = json.loads((root/'runtime-dynamic-render-result.json').read_text())
+          summary = {
+              'state': r['state'],
+              'surface_rebuilds_before': r['before']['surface_rebuilds_per_41_key_playback'],
+              'surface_rebuilds_after': r['after']['surface_rebuilds_per_41_key_playback'],
+              'surface_rebuild_reduction_percent': r['after']['surface_rebuild_reduction_percent'],
+              'surface_construction_reduction_percent': r['after']['surface_construction_reduction_percent'],
+              'cached_raw_vertex_bytes': r['engine_packed_vertex_cache']['cached_raw_vertex_bytes_all_41_keys'],
+              'render_pairs': r['render_equivalence']['render_pairs'],
+              'byte_identical_pairs': r['render_equivalence']['byte_identical_pairs'],
+              'changed_pixels': r['render_equivalence']['total_changed_pixels'],
+              'max_channel_delta': r['render_equivalence']['maximum_channel_delta'],
+              'observer_sensitivity_changed_pixels': r['render_equivalence']['observer_sensitivity_key0_vs_key20_changed_pixels'],
+              'baseline_median_sweep_us': r['proof_host_timing']['baseline_median_sweep_us'],
+              'candidate_median_sweep_us': r['proof_host_timing']['candidate_median_sweep_us'],
+              'median_delta_percent': r['proof_host_timing']['median_delta_percent'],
+              'baseline_p95_sweep_us': r['proof_host_timing']['baseline_p95_sweep_us'],
+              'candidate_p95_sweep_us': r['proof_host_timing']['candidate_p95_sweep_us'],
+              'p95_delta_percent': r['proof_host_timing']['p95_delta_percent'],
+              'envelope_vs_median_frame_volume_ratio': r['motion_envelope']['envelope_vs_median_frame_volume_ratio'],
+              'visual_tradeoff': r['visual_tradeoff'],
+          }
+          (root/'summary.json').write_text(json.dumps(summary, indent=2, sort_keys=True)+'\n')
+          PY
+          cat > "$ROOT/README.txt" <<'EOF'
+          Bounded AXM Animal Runtime / Optimization evidence.
+          Pass 40 kept one ArrayMesh but still rebuilt one surface for every authored key. This candidate keeps one dynamic surface and sends Godot's exact engine-packed vertex_data through one vertex-buffer region update per key. UV and index buffers remain untouched.
+          Correctness is measured with a target-renderer debug observer that exercises POSITION, NORMAL and TANGENT. All 41 control/candidate frames must be byte-identical, and a key-0 versus key-20 control proves the observer can see actual deformation/direction-frame change.
+          The conservative full-motion custom AABB prevents stale-culling disappearance but broadens culling volume; that tradeoff is retained for Art/Runtime review.
+          Proof-host submission timing excludes payload preparation and is not target-device evidence. Fresh production shading, bilateral receiving, continuous/interpolated playback, target-device CPU/GPU/FPS/VRAM/thermal/battery, Art Direction acceptance, Visual QA acceptance, CANON and production readiness remain HOLD.
+          EOF
+
+      - name: Upload exact Runtime dynamic-render repair evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: animal-runtime-direction-frame-dynamic-render-repair-${{ github.event.pull_request.head.sha || github.sha }}
+          path: animal-runtime/evidence/runtime-animal-direction-frame-dynamic-render-002
+          if-no-files-found: warn
+          retention-days: 30
