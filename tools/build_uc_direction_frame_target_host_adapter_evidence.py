@@ -34,6 +34,8 @@ from axm_animal_design.uc_rigged_tangent_bridge import (
 EXPECTED_RIGGING_HEAD = "81ab44eab2e13bed95187610a476be2b2c4667a7"
 EXPECTED_RIGGING_RECONSTRUCTION_BLOB = "c9916c62e2081922b8eb7ec0b3cd1c25c019b2f6"
 EXPECTED_SOURCE_GLB_SHA256 = "ecb122e3274929c3d99bc8e29a472aaa2657bcb16b13331a4f1972bb6ec6b493"
+EXPECTED_ADOPTION_EVIDENCE_SCHEMA = "axm.animal-current-uc-direction-frame-reconstruction-contract-evidence/v0.1"
+EXPECTED_ADOPTION_STATE = "PASS_POST_SKIN_OWNER_FRAME_RECONSTRUCTION_CONTRACT_ADOPTED__HOLD_TARGET_RUNTIME_IMPLEMENTATION"
 UC_CODEC_PATH = "capabilities/platform-hands/shared/asset-hands/rigged-gltf-codec.js"
 POSITION_TOLERANCE_M = 1e-6
 BUILD_SCHEMA = "axm.animal-direction-frame-target-host-build-evidence/v0.1"
@@ -184,7 +186,15 @@ def main() -> int:
     if glb_sha256 != EXPECTED_SOURCE_GLB_SHA256:
         raise ValueError("exact Technical Art source GLB identity drift")
 
-    contract = load_json(args.contract_receipt)
+    adoption_evidence = load_json(args.contract_receipt)
+    if adoption_evidence.get("schema") != EXPECTED_ADOPTION_EVIDENCE_SCHEMA:
+        raise ValueError("predecessor Technical Art adoption evidence schema drift")
+    if adoption_evidence.get("state") != EXPECTED_ADOPTION_STATE:
+        raise ValueError("predecessor Technical Art adoption evidence state drift")
+    contract = adoption_evidence.get("contract")
+    if not isinstance(contract, dict):
+        raise ValueError("predecessor Technical Art adoption evidence omitted nested contract")
+
     uc_inspection = inspect_with_uc_codec(args.uc_root, args.source_glb)
     owner = invoke_exact_owner(args.rigging_root, args.source_glb)
     owner_frames = owner.get("frames")
@@ -206,10 +216,7 @@ def main() -> int:
             source_direction_to_uc(normal, "owner reconstructed normal")
             for normal in row["source_render_normals"]
         ]
-        mapped_tangents = [
-            source_tangent_to_uc(tangent)
-            for tangent in row["source_render_tangents"]
-        ]
+        mapped_tangents = [source_tangent_to_uc(tangent) for tangent in row["source_render_tangents"]]
         transported_positions = row["target_skinned_positions"]
         residual = max(
             __import__("math").dist(left, right)
@@ -286,10 +293,7 @@ def main() -> int:
             "reconstruction_module_blob": owner_blob,
             "algorithm_copied_into_technical_art": False,
         },
-        "source_glb": {
-            "sha256": glb_sha256,
-            "bytes": len(glb_bytes),
-        },
+        "source_glb": {"sha256": glb_sha256, "bytes": len(glb_bytes)},
         "universal_creation": {
             "head": args.uc_head,
             "codec_blob": observed_uc_blob,
