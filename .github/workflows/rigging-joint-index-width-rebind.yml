@@ -1,0 +1,164 @@
+name: Rigging joint-index width rebind evidence
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+  pull-requests: write
+
+jobs:
+  rigging-joint-index-width-rebind:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ['3.11', '3.13']
+    steps:
+      - name: Checkout exact Rigging head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          path: animal
+          fetch-depth: 0
+
+      - name: Prove continuity from prior post-skin reconstruction
+        working-directory: animal
+        run: |
+          git merge-base --is-ancestor 81ab44eab2e13bed95187610a476be2b2c4667a7 HEAD
+          git merge-base --is-ancestor 63c65d57fda0595217f86d971ff8c67f256188be HEAD
+          test "$(git hash-object src/axm_animal_design/transported_frame_reconstruction_constraint.py)" = "c9916c62e2081922b8eb7ec0b3cd1c25c019b2f6"
+
+      - name: Checkout exact current Technical Art producer
+        uses: actions/checkout@v4
+        with:
+          repository: mike-axiom-mir/axm-animal-design
+          ref: 54c9c11505e798a56619ebc14e9ab41f522eef70
+          path: technical-art-producer
+          fetch-depth: 1
+
+      - name: Verify exact Technical Art producer module
+        run: |
+          test "$(git -C technical-art-producer rev-parse HEAD)" = "54c9c11505e798a56619ebc14e9ab41f522eef70"
+          test "$(git -C technical-art-producer hash-object src/axm_animal_design/uc_rigged_tangent_bridge.py)" = "68acd2ad5d335a4c6bcabf3d4d0208d7123c12eb"
+
+      - name: Download retained 16-bit control and current byte-width producer artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          rm -rf control-evidence producer-evidence /tmp/axm-control.zip /tmp/axm-producer.zip
+          mkdir -p control-evidence producer-evidence
+          gh api repos/${{ github.repository }}/actions/artifacts/10474385703/zip > /tmp/axm-control.zip
+          gh api repos/${{ github.repository }}/actions/artifacts/10477320699/zip > /tmp/axm-producer.zip
+          test "$(sha256sum /tmp/axm-control.zip | awk '{print $1}')" = "7fc2a7f5d745da593e8762efa98e13661f84a057b1eb60921d576c366e71d7bb"
+          test "$(sha256sum /tmp/axm-producer.zip | awk '{print $1}')" = "bc5fe4798ce0c43d04338114905ccf1ae8cd9a676800e824571b60aef9aff15b"
+          unzip -q /tmp/axm-control.zip -d control-evidence
+          unzip -q /tmp/axm-producer.zip -d producer-evidence
+          CONTROL_GLB="$(find "$GITHUB_WORKSPACE/control-evidence" -name 'animal_selected003_right_mirror_rigged_uv_tangent_41key.glb' -print -quit)"
+          CONTROL_RECEIPT="$(find "$GITHUB_WORKSPACE/control-evidence" -name 'uc_rigged_uv_tangent_transport_receipt.json' -print -quit)"
+          PRODUCER_GLB="$(find "$GITHUB_WORKSPACE/producer-evidence" -name 'animal_selected003_right_mirror_rigged_uv_tangent_41key.glb' -print -quit)"
+          PRODUCER_RECEIPT="$(find "$GITHUB_WORKSPACE/producer-evidence" -name 'uc_rigged_uv_tangent_transport_receipt.json' -print -quit)"
+          ADOPTION_RECEIPT="$(find "$GITHUB_WORKSPACE/producer-evidence" -name 'joint_index_width_adoption_receipt.json' -print -quit)"
+          OWNER_FRAMES="$(find "$GITHUB_WORKSPACE/producer-evidence" -name 'animation-owner-frames.json' -print -quit)"
+          GEOMETRY_BASIS="$(find "$GITHUB_WORKSPACE/producer-evidence" -name 'geometry-right-basis.json' -print -quit)"
+          test -n "$CONTROL_GLB" && test -n "$CONTROL_RECEIPT"
+          test -n "$PRODUCER_GLB" && test -n "$PRODUCER_RECEIPT" && test -n "$ADOPTION_RECEIPT"
+          test -n "$OWNER_FRAMES" && test -n "$GEOMETRY_BASIS"
+          test "$(sha256sum "$CONTROL_GLB" | awk '{print $1}')" = "ecb122e3274929c3d99bc8e29a472aaa2657bcb16b13331a4f1972bb6ec6b493"
+          test "$(sha256sum "$PRODUCER_GLB" | awk '{print $1}')" = "8d9bfb80369bda09eaad786a35833cd5e04da5e608211f53648daaa1cde29566"
+          echo "AXM_CONTROL_GLB=$CONTROL_GLB" >> "$GITHUB_ENV"
+          echo "AXM_CONTROL_RECEIPT=$CONTROL_RECEIPT" >> "$GITHUB_ENV"
+          echo "AXM_PRODUCER_GLB=$PRODUCER_GLB" >> "$GITHUB_ENV"
+          echo "AXM_PRODUCER_RECEIPT=$PRODUCER_RECEIPT" >> "$GITHUB_ENV"
+          echo "AXM_ADOPTION_RECEIPT=$ADOPTION_RECEIPT" >> "$GITHUB_ENV"
+          echo "AXM_OWNER_FRAMES=$OWNER_FRAMES" >> "$GITHUB_ENV"
+          echo "AXM_GEOMETRY_BASIS=$GEOMETRY_BASIS" >> "$GITHUB_ENV"
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Compile
+        working-directory: animal
+        run: python -m compileall -q src tests tools
+
+      - name: Run complete Animal suite
+        working-directory: animal
+        env:
+          PYTHONPATH: src
+        run: python -m unittest discover -s tests -v
+
+      - name: Build exact joint-index width Rigging rebind evidence
+        if: matrix.python-version == '3.11'
+        working-directory: animal
+        env:
+          PYTHONPATH: src
+        run: |
+          rm -rf evidence/rigging-joint-index-width-rebind-001
+          python tools/build_joint_index_width_rigging_rebind.py \
+            --control-glb "$AXM_CONTROL_GLB" \
+            --producer-glb "$AXM_PRODUCER_GLB" \
+            --control-transport-receipt "$AXM_CONTROL_RECEIPT" \
+            --producer-transport-receipt "$AXM_PRODUCER_RECEIPT" \
+            --adoption-receipt "$AXM_ADOPTION_RECEIPT" \
+            --owner-frames "$AXM_OWNER_FRAMES" \
+            --geometry-basis "$AXM_GEOMETRY_BASIS" \
+            --control-artifact-id 10474385703 \
+            --control-artifact-sha256 7fc2a7f5d745da593e8762efa98e13661f84a057b1eb60921d576c366e71d7bb \
+            --producer-artifact-id 10477320699 \
+            --producer-artifact-sha256 bc5fe4798ce0c43d04338114905ccf1ae8cd9a676800e824571b60aef9aff15b \
+            --producer-technical-art-head 54c9c11505e798a56619ebc14e9ab41f522eef70 \
+            --producer-module-blob 68acd2ad5d335a4c6bcabf3d4d0208d7123c12eb \
+            --current-rigging-head "$(git rev-parse HEAD)" \
+            --out evidence/rigging-joint-index-width-rebind-001
+          grep -q 'PASS_TECHNICAL_ART_JOINT_INDEX_WIDTH_RIGGING_REBIND_41_KEYS__DEFORMED_DIRECTION_FRAME_HOLD_PRESERVED' evidence/rigging-joint-index-width-rebind-001/joint-index-width-rigging-rebind-receipt.json
+          grep -q '"animation_accepted": false' evidence/rigging-joint-index-width-rebind-001/joint-index-width-rigging-rebind-receipt.json
+          grep -q '"runtime_or_controller_accepted": false' evidence/rigging-joint-index-width-rebind-001/joint-index-width-rigging-rebind-receipt.json
+          grep -q '"deformed_direction_frame_equivalence_claimed": false' evidence/rigging-joint-index-width-rebind-001/joint-index-width-rigging-rebind-receipt.json
+
+      - name: Publish exact rebind summary to PR
+        if: matrix.python-version == '3.11' && github.event_name == 'pull_request'
+        working-directory: animal
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          python - <<'PY'
+          import json
+          import subprocess
+          from pathlib import Path
+
+          receipt = json.loads(Path('evidence/rigging-joint-index-width-rebind-001/joint-index-width-rigging-rebind-receipt.json').read_text(encoding='utf-8'))
+          head = subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip()
+          storage = receipt['storage_boundary']
+          motion = receipt['motion_boundary']
+          mutation = receipt['negative_controls']['rigid_child_joint_identity_mutation']
+          hold = receipt['preserved_hold']
+          body = f'''### Rigging JOINTS_0 width rebind — exact head `{head}`
+
+Scoped result: **`{receipt['state']}`**
+
+- exact Technical Art producer: `{receipt['exact_identities']['producer_technical_art_head']}` / GLB `{receipt['exact_identities']['producer_glb_sha256']}`;
+- JOINTS_0 storage: `{storage['control_joint_component_type']} -> {storage['producer_joint_component_type']}` with `{storage['decoded_joint_scalar_count']}` decoded joint scalars exact;
+- decoded weights / positions / normals / tangents / UVs / indices / animation keys / joint pivot remain exact across producer identities;
+- all `{motion['authored_key_count']}` exact authored keys rerun: control-vs-producer max skinned-position residual `{motion['maximum_control_vs_producer_position_residual_m']}` m; producer-vs-owner max `{motion['maximum_producer_vs_owner_position_residual_m']}` m;
+- representative samples retained at `0/10/20/30/40`;
+- rigid-child joint identity mutation produces `{mutation['position_signal_m']}` m at peak and is detected;
+- historical direction-frame HOLD stays explicit: normal excess `{hold['static_normal_deformation_excess_deg']}`°, corrected tangent excess `{hold['static_corrected_tangent_deformation_excess_deg']}`°; this lane does not recompute or clear it.
+
+Animation accepted = `false`; Runtime/controller accepted = `false`; Technical Art reconstruction adopted = `false`; deformed direction-frame equivalence claimed = `false`; CANON = `false`.
+'''
+          Path('/tmp/rigging-joint-width-comment.md').write_text(body, encoding='utf-8')
+          PY
+          gh pr comment "$PR_NUMBER" --repo "$REPOSITORY" --body-file /tmp/rigging-joint-width-comment.md
+
+      - name: Upload exact Rigging rebind evidence
+        if: ${{ always() && matrix.python-version == '3.11' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: animal-rigging-joint-index-width-rebind-${{ github.event.pull_request.head.sha || github.sha }}
+          path: animal/evidence/rigging-joint-index-width-rebind-001
+          if-no-files-found: error
+          retention-days: 30
