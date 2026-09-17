@@ -13,7 +13,8 @@ UC_HEAD='e6826acbc7296ba77d25534c8d3d3770ff3fa747'
 UC_CODEC='capabilities/platform-hands/shared/asset-hands/rigged-gltf-codec.js'
 UC_CODEC_BLOB='b1f2e68bb6c6800af5496decc95a8044d141edc9'
 VERTICES=84; TRIANGLES=80
-SCHEMA='axm.runtime-animal-weight-width-budget/v0.1'; STATE='PASS_ANIMAL_WEIGHT_WIDTH_COMPACTION_PAYLOAD_AND_UC_RECEIVER'
+SCHEMA='axm.runtime-animal-weight-width-budget/v0.1'; STATE='HOLD_ANIMAL_WEIGHT_WIDTH_COMPACTION__CURRENT_UC_RIGGED_CODEC_FLOAT_ONLY'
+EXPECTED_UC_ERROR='WEIGHTS_0 accessor invalid'
 
 def git_head(path:Path)->str: return subprocess.check_output(['git','-C',str(path),'rev-parse','HEAD'],text=True).strip()
 def git_blob(path:Path,p:str)->str: return subprocess.check_output(['git','-C',str(path),'rev-parse',f'HEAD:{p}'],text=True).strip()
@@ -26,9 +27,9 @@ def numeric_delta(a:Any,b:Any)->float:
 def inspect(root:Path,glb:Path)->dict[str,Any]:
     script="const fs=require('fs');const c=require(process.argv[1]);const b=new Uint8Array(fs.readFileSync(process.argv[2]));process.stdout.write(JSON.stringify(c.inspect(b)));"
     return json.loads(subprocess.check_output(['node','-e',script,str((root/UC_CODEC).resolve()),str(glb.resolve())],text=True))
-def require_uc(v:dict[str,Any],label:str)->None:
-    if v.get('pass') is not True or v.get('vertices')!=VERTICES or v.get('triangles')!=TRIANGLES: raise ValueError(f'{label} UC geometry failed')
-    if v.get('weightSumsPass') is not True or v.get('jointIndicesPass') is not True or v.get('deformation',{}).get('pass') is not True: raise ValueError(f'{label} UC skin/deformation failed')
+def require_control_uc(v:dict[str,Any])->None:
+    if v.get('pass') is not True or v.get('vertices')!=VERTICES or v.get('triangles')!=TRIANGLES: raise ValueError('control UC geometry failed')
+    if v.get('weightSumsPass') is not True or v.get('jointIndicesPass') is not True or v.get('deformation',{}).get('pass') is not True: raise ValueError('control UC skin/deformation failed')
 
 def main()->int:
     ap=argparse.ArgumentParser(); ap.add_argument('--control-glb',type=Path,required=True); ap.add_argument('--uc-root',type=Path,required=True); ap.add_argument('--runtime-head',required=True); ap.add_argument('--out-dir',type=Path,required=True); args=ap.parse_args()
@@ -43,12 +44,15 @@ def main()->int:
     if c.max_abs_weight_error>1.0/65535.0+1e-12 or c.max_row_sum_error>1e-12: raise ValueError('quantization error boundary failed')
     if not c.non_weight_hashes_identical or len(candidate)>=len(control): raise ValueError('payload identity/size gate failed')
     args.out_dir.mkdir(parents=True,exist_ok=True); co=args.out_dir/'control-f32-weights.glb'; no=args.out_dir/'candidate-u16norm-weights.glb'; co.write_bytes(control); no.write_bytes(candidate)
-    cu=inspect(args.uc_root,co); nu=inspect(args.uc_root,no); require_uc(cu,'control'); require_uc(nu,'candidate')
+    cu=inspect(args.uc_root,co); nu=inspect(args.uc_root,no); require_control_uc(cu)
+    candidate_errors=[str(value) for value in nu.get('errors',[])];
+    if nu.get('pass') is True or EXPECTED_UC_ERROR not in candidate_errors: raise ValueError(f'expected exact current UC normalized-weight rejection, observed pass={nu.get("pass")} errors={candidate_errors}')
+    (args.out_dir/'uc-control.json').write_text(json.dumps(cu,indent=2,sort_keys=True)+'\n'); (args.out_dir/'uc-candidate.json').write_text(json.dumps(nu,indent=2,sort_keys=True)+'\n')
     clip=str(cp.document['animations'][0]['name'])
     request={'width':960,'height':720,'poses':[{'clip':clip,'time_s':t} for t in (0.0,0.25,0.5,0.75,1.0)],'views':[{'clip':clip,'time_s':0.5,'yaw':0.72,'elevation':0.32},{'clip':clip,'time_s':0.5,'yaw':-0.58,'elevation':0.16}],'playback':None}
     (args.out_dir/'request.json').write_text(json.dumps(request,indent=2,sort_keys=True)+'\n')
     saved=c.control_payload_bytes-c.candidate_payload_bytes; total_saved=len(control)-len(candidate)
-    report={'schema':SCHEMA,'state':STATE,'runtime_head':args.runtime_head,'technical_art_head':TECHNICAL_ART_HEAD,'control_glb_sha256':CONTROL_SHA,'universal_creation':{'head':UC_HEAD,'codec_blob':UC_CODEC_BLOB,'product_modified':False},'representation':{'render_vertices':VERTICES,'weight_slots_per_vertex':4,'control_component_type':FLOAT,'control_normalized':False,'candidate_component_type':UNSIGNED_SHORT,'candidate_normalized':True,'control_weight_payload_bytes':c.control_payload_bytes,'candidate_weight_payload_bytes':c.candidate_payload_bytes,'weight_payload_saved_bytes':saved,'weight_payload_reduction_fraction':saved/c.control_payload_bytes,'control_glb_bytes':len(control),'candidate_glb_bytes':len(candidate),'total_glb_saved_bytes':total_saved,'total_glb_reduction_fraction':total_saved/len(control),'candidate_glb_sha256':sha256_bytes(candidate),'max_abs_decoded_weight_error':c.max_abs_weight_error,'max_candidate_row_sum_error':c.max_row_sum_error,'non_weight_accessor_payload_hashes_identical':True},'current_uc_receiver':{'control_pass':True,'candidate_pass':True,'deformation_receipt_max_numeric_delta':numeric_delta(cu.get('deformation'),nu.get('deformation'))},'visual_review_boundary':{'state':'PENDING_REAL_GODOT_IMPORT_RENDER_A_B'},'truth_boundary':{'does_not_prove':['deformed normal/tangent direction-frame equivalence','target-device FPS/CPU/GPU/VRAM/heap improvement','generic sparse/interleaved/multi-primitive safety','automatic Technical Art or UC adoption','CANON or production readiness']}}
-    (args.out_dir/'build-report.json').write_text(json.dumps(report,indent=2,sort_keys=True)+'\n'); (args.out_dir/'uc-control.json').write_text(json.dumps(cu,indent=2,sort_keys=True)+'\n'); (args.out_dir/'uc-candidate.json').write_text(json.dumps(nu,indent=2,sort_keys=True)+'\n')
-    print(STATE); print(json.dumps(report['representation'],sort_keys=True)); return 0
+    report={'schema':SCHEMA,'state':STATE,'runtime_head':args.runtime_head,'technical_art_head':TECHNICAL_ART_HEAD,'control_glb_sha256':CONTROL_SHA,'universal_creation':{'head':UC_HEAD,'codec_blob':UC_CODEC_BLOB,'product_modified':False},'representation':{'render_vertices':VERTICES,'weight_slots_per_vertex':4,'control_component_type':FLOAT,'control_normalized':False,'candidate_component_type':UNSIGNED_SHORT,'candidate_normalized':True,'control_weight_payload_bytes':c.control_payload_bytes,'candidate_weight_payload_bytes':c.candidate_payload_bytes,'weight_payload_saved_bytes':saved,'weight_payload_reduction_fraction':saved/c.control_payload_bytes,'control_glb_bytes':len(control),'candidate_glb_bytes':len(candidate),'total_glb_saved_bytes':total_saved,'total_glb_reduction_fraction':total_saved/len(control),'candidate_glb_sha256':sha256_bytes(candidate),'max_abs_decoded_weight_error':c.max_abs_weight_error,'max_candidate_row_sum_error':c.max_row_sum_error,'non_weight_accessor_payload_hashes_identical':True},'current_uc_receiver':{'control_pass':True,'candidate_pass':False,'candidate_errors':candidate_errors,'blocking_error':EXPECTED_UC_ERROR,'receiver_contract':'rigged-gltf-codec.js currently requires WEIGHTS_0 FLOAT VEC4'},'visual_review_boundary':{'state':'PENDING_REAL_GODOT_IMPORT_RENDER_A_B'},'truth_boundary':{'proves_so_far':['current producer WEIGHTS_0 payload can be deterministically quantized to normalized u16 with bounded scalar error and unchanged non-weight accessor payloads','current UC rigged-gltf-codec rejects that legal storage representation because its WEIGHTS_0 gate is FLOAT-only'],'does_not_prove':['real Godot importer acceptance until follow-on A/B completes','deformed normal/tangent direction-frame equivalence','target-device FPS/CPU/GPU/VRAM/heap improvement','generic sparse/interleaved/multi-primitive safety','automatic Technical Art or UC adoption','CANON or production readiness']}}
+    (args.out_dir/'build-report.json').write_text(json.dumps(report,indent=2,sort_keys=True)+'\n')
+    print(STATE); print(json.dumps({'representation':report['representation'],'uc_candidate_errors':candidate_errors},sort_keys=True)); return 0
 if __name__=='__main__': raise SystemExit(main())
