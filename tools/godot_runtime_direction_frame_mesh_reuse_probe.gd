@@ -222,9 +222,10 @@ func _median(values: Array) -> float:
 	var count := ordered.size()
 	if count == 0:
 		return 0.0
+	var upper := int(count / 2)
 	if count % 2 == 1:
-		return float(ordered[count / 2])
-	return (float(ordered[count / 2 - 1]) + float(ordered[count / 2])) * 0.5
+		return float(ordered[upper])
+	return (float(ordered[upper - 1]) + float(ordered[upper])) * 0.5
 
 
 func _percentile(values: Array, fraction: float) -> float:
@@ -233,7 +234,7 @@ func _percentile(values: Array, fraction: float) -> float:
 	if ordered.is_empty():
 		return 0.0
 	var index := int(ceil(float(ordered.size()) * fraction)) - 1
-	index = clamp(index, 0, ordered.size() - 1)
+	index = clampi(index, 0, ordered.size() - 1)
 	return float(ordered[index])
 
 
@@ -254,7 +255,7 @@ func _initialize() -> void:
 		_fatal("runtime probe requires all 41 authored keys")
 
 	# Conversion from retained JSON into Godot Packed arrays is intentionally
-	# outside the timed region: a product receiver would not reparsed JSON every
+	# outside the timed region: a product receiver would not reparse JSON every
 	# frame, and this pass isolates ArrayMesh resource lifecycle only.
 	var packed_frames: Array = []
 	for frame_index in range(frames.size()):
