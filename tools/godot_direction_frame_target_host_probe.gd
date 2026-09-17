@@ -37,10 +37,26 @@ func _as_vec2(value: Variant) -> Vector2:
 
 
 func _direction_angle_deg(left: Vector3, right: Vector3) -> float:
-	if left.length_squared() <= 0.0 or right.length_squared() <= 0.0:
+	var left_length := left.length()
+	var right_length := right.length()
+	if left_length <= 0.0 or right_length <= 0.0:
 		return INF
-	var dot_value: float = clamp(left.normalized().dot(right.normalized()), -1.0, 1.0)
-	return rad_to_deg(acos(dot_value))
+	var length_product := left_length * right_length
+	var sine_value: float = clamp(left.cross(right).length() / length_product, 0.0, 1.0)
+	var cosine_value: float = clamp(left.dot(right) / length_product, -1.0, 1.0)
+	return rad_to_deg(atan2(sine_value, cosine_value))
+
+
+func _verify_direction_angle_metric() -> void:
+	# acos(dot) loses useful precision for nearly parallel float32 Vector3 values.
+	# This check retains the original angular gate while proving that the evidence
+	# metric can still resolve a known angle smaller than that gate.
+	var known_angle_deg := 0.01
+	var known_angle_rad := deg_to_rad(known_angle_deg)
+	var near_parallel := Vector3(cos(known_angle_rad), sin(known_angle_rad), 0.0)
+	var measured_angle_deg := _direction_angle_deg(Vector3.RIGHT, near_parallel)
+	if abs(measured_angle_deg - known_angle_deg) > 0.0005:
+		_fatal("direction angle evidence metric lost near-parallel precision")
 
 
 func _write_json(path: String, value: Dictionary) -> void:
@@ -57,6 +73,8 @@ func _initialize() -> void:
 	var out_path := _arg_value(args, "--out")
 	if payload_path.is_empty() or out_path.is_empty():
 		_fatal("usage: --payload <json> --out <json>")
+
+	_verify_direction_angle_metric()
 
 	var payload_text := FileAccess.get_file_as_string(payload_path)
 	var payload: Variant = JSON.parse_string(payload_text)
@@ -205,6 +223,8 @@ func _initialize() -> void:
 			"position_tolerance": POSITION_TOLERANCE,
 			"direction_vector_tolerance": DIRECTION_VECTOR_TOLERANCE,
 			"direction_angle_tolerance_deg": DIRECTION_ANGLE_TOLERANCE_DEG,
+			"direction_angle_metric": "atan2(cross_length/length_product,dot/length_product)",
+			"direction_angle_metric_self_check_deg": 0.01,
 			"uv_tolerance": UV_TOLERANCE,
 		},
 		"truth_boundary": {
