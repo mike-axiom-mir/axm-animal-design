@@ -1,0 +1,147 @@
+name: Materials Animal tangent-space lookdev
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  materials-animal-tangent-space-lookdev:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      matrix:
+        python-version: ['3.11', '3.13']
+    steps:
+      - name: Checkout exact Materials tangent-space head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          path: animal
+          fetch-depth: 0
+
+      - name: Prove exact Rigging tangent and Geometry ancestry
+        working-directory: animal
+        run: |
+          git merge-base --is-ancestor 63c65d57fda0595217f86d971ff8c67f256188be HEAD
+          git merge-base --is-ancestor ca4bb8a2f144231f8755eacc980785d1807b79db HEAD
+          test "$(git hash-object src/axm_animal_design/bilateral_deformed_tangent_frames.py)" = "fbade964b3305d70775d196232ad2cd4671d0eac"
+          test "$(git hash-object src/axm_animal_design/bilateral_uv_tangent_basis.py)" = "ba0b4e620f132413606177358e47bd32ae4d4965"
+
+      - name: Checkout exact Rigging plan and weighting-profile donor
+        uses: actions/checkout@v4
+        with:
+          repository: mike-axiom-mir/axm-animal-design
+          ref: 04760112deb81a8d145226fe7ee02923107c9916
+          path: rig-donor
+
+      - name: Verify exact Rigging donor checkout
+        run: test "$(git -C rig-donor rev-parse HEAD)" = "04760112deb81a8d145226fe7ee02923107c9916"
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Compile
+        working-directory: animal
+        run: python -m compileall -q src tests tools
+
+      - name: Run full inherited Animal suite
+        working-directory: animal
+        env:
+          PYTHONPATH: src
+          AXM_RIG_PLAN: ../rig-donor/examples/quadruped_rig_probe_001.json
+          AXM_WEIGHTING_PROFILE: ../rig-donor/examples/quadruped_weighting_refinement_001.json
+        run: python -m unittest discover -s tests -v
+
+      - name: Install image verifier dependency
+        if: matrix.python-version == '3.11'
+        run: python -m pip install --disable-pip-version-check pillow
+
+      - name: Setup Godot target host
+        if: matrix.python-version == '3.11'
+        uses: chickensoft-games/setup-godot@v2
+        with:
+          version: 4.7.2
+          use-dotnet: false
+          include-templates: false
+
+      - name: Install virtual display when needed
+        if: matrix.python-version == '3.11'
+        run: |
+          if ! command -v xvfb-run >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y xvfb
+          fi
+
+      - name: Build exact tangent-space lookdev payload
+        if: matrix.python-version == '3.11'
+        working-directory: animal
+        env:
+          PYTHONPATH: src
+        run: |
+          rm -rf evidence/materials-animal-tangent-space-lookdev-001
+          mkdir -p evidence/materials-animal-tangent-space-lookdev-001/renders
+          python tools/build_animal_tangent_space_lookdev_payload.py \
+            --source examples/quadruped_neutral_001.json \
+            --left-profile examples/quadruped_elbow_source_successor_003.json \
+            --bilateral-profile examples/quadruped_elbow_bilateral_successor_003.json \
+            --rig-plan ../rig-donor/examples/quadruped_rig_probe_001.json \
+            --weighting-profile ../rig-donor/examples/quadruped_weighting_refinement_001.json \
+            --rigging-tangent-head 63c65d57fda0595217f86d971ff8c67f256188be \
+            --rigging-tangent-module-blob fbade964b3305d70775d196232ad2cd4671d0eac \
+            --geometry-head ca4bb8a2f144231f8755eacc980785d1807b79db \
+            --geometry-module-blob ba0b4e620f132413606177358e47bd32ae4d4965 \
+            --out evidence/materials-animal-tangent-space-lookdev-001/review-payload.json
+
+      - name: Validate Godot tangent-space lookdev project
+        if: matrix.python-version == '3.11'
+        working-directory: animal
+        run: godot --headless --path evidence/godot_animal_tangent_space_lookdev --editor --quit
+
+      - name: Capture exact target-host tangent-space lookdev
+        if: matrix.python-version == '3.11'
+        working-directory: animal
+        run: |
+          set -euo pipefail
+          timeout 300s xvfb-run --auto-servernum --server-args="-screen 0 960x720x24" \
+            godot \
+            --display-driver x11 \
+            --rendering-method gl_compatibility \
+            --path evidence/godot_animal_tangent_space_lookdev -- \
+            --payload "$(pwd)/evidence/materials-animal-tangent-space-lookdev-001/review-payload.json" \
+            --out-dir "$(pwd)/evidence/materials-animal-tangent-space-lookdev-001/renders" \
+            --rigging-tangent-head 63c65d57fda0595217f86d971ff8c67f256188be \
+            --rigging-tangent-module-blob fbade964b3305d70775d196232ad2cd4671d0eac \
+            --geometry-head ca4bb8a2f144231f8755eacc980785d1807b79db \
+            --geometry-module-blob ba0b4e620f132413606177358e47bd32ae4d4965
+
+      - name: Verify and summarize tangent-space target-host evidence
+        if: matrix.python-version == '3.11'
+        working-directory: animal
+        run: |
+          python tools/verify_animal_tangent_space_lookdev.py \
+            --payload evidence/materials-animal-tangent-space-lookdev-001/review-payload.json \
+            --telemetry evidence/materials-animal-tangent-space-lookdev-001/target-host-telemetry.json \
+            --renders evidence/materials-animal-tangent-space-lookdev-001/renders \
+            --materials-head "$(git rev-parse HEAD)" \
+            --out evidence/materials-animal-tangent-space-lookdev-001/material-lookdev-evidence.json
+          grep -q 'PASS_TARGET_HOST_TANGENT_SPACE_DIAGNOSTIC_CAPTURED' \
+            evidence/materials-animal-tangent-space-lookdev-001/material-lookdev-evidence.json
+          git rev-parse HEAD > evidence/materials-animal-tangent-space-lookdev-001/exact-materials-head.txt
+          printf '%s\n' '63c65d57fda0595217f86d971ff8c67f256188be' > evidence/materials-animal-tangent-space-lookdev-001/exact-rigging-tangent-head.txt
+          printf '%s\n' 'ca4bb8a2f144231f8755eacc980785d1807b79db' > evidence/materials-animal-tangent-space-lookdev-001/exact-geometry-uv-tangent-head.txt
+          cat > evidence/materials-animal-tangent-space-lookdev-001/README.txt <<'EOF'
+          Materials / LookDev tangent-space diagnostic only.
+          This consumes Geometry PR #20's exact 84-vertex seam-aware UV/normal/tangent render domain through Rigging PR #22's representative deformed tangent frames. It renders both sides, both established weighting identities, -60/-30/0/+30/+60 degrees and two fixed cameras with a flat tangent-space control, a deterministic periodic tangent-space probe, and a deliberate tangent-handedness mutation.
+          The periodic probe is procedural and source-local; it is not a production Animal normal map. Geometry, rigging, UVs, normals, exact tangents, base material scalars, lighting and camera contexts are held except for the explicit mutation control.
+          A capture PASS proves the target host responds to the exact tangent-space chain and that the harness detects tangent-W corruption. It does not automatically prove seam-free final appearance, final UV/texel density, production transport, continuous motion, Art/QA acceptance, Runtime acceptance, CANON or production readiness.
+          EOF
+
+      - name: Upload exact Materials tangent-space evidence
+        if: ${{ always() && matrix.python-version == '3.11' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: animal-materials-tangent-space-lookdev-${{ github.event.pull_request.head.sha || github.sha }}
+          path: animal/evidence/materials-animal-tangent-space-lookdev-001
+          if-no-files-found: error
+          retention-days: 30

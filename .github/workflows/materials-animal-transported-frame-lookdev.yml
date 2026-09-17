@@ -1,0 +1,216 @@
+name: Materials Animal transported-frame lookdev
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  materials-animal-transported-frame-lookdev:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    strategy:
+      matrix:
+        python-version: ['3.11', '3.13']
+    steps:
+      - name: Checkout exact Materials head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          path: animal
+          fetch-depth: 0
+
+      - name: Prove existing Materials owner-frame baseline ancestry
+        working-directory: animal
+        run: |
+          git merge-base --is-ancestor e9d5c451b16bd05d2419248f58bef911f83dc1e8 HEAD
+          test "$(git hash-object evidence/godot_animal_tangent_space_lookdev/render_review.gd)" = "252537d1544aa4e4af20bc78e54a6f886c1b9af0"
+          test "$(git hash-object tools/build_animal_tangent_space_lookdev_payload.py)" = "cdc97ebcee6fccf122c64d71d9ab087a3919ac4c"
+
+      - name: Checkout exact Rigging reconstruction owner
+        uses: actions/checkout@v4
+        with:
+          repository: mike-axiom-mir/axm-animal-design
+          ref: 81ab44eab2e13bed95187610a476be2b2c4667a7
+          path: rigging-owner
+          fetch-depth: 1
+
+      - name: Verify exact Rigging reconstruction owner
+        run: |
+          test "$(git -C rigging-owner rev-parse HEAD)" = "81ab44eab2e13bed95187610a476be2b2c4667a7"
+          test "$(git -C rigging-owner hash-object src/axm_animal_design/transported_frame_reconstruction_constraint.py)" = "c9916c62e2081922b8eb7ec0b3cd1c25c019b2f6"
+          test "$(git -C rigging-owner hash-object src/axm_animal_design/transported_tangent_deformation_audit.py)" = "42f31fc5cb95426e89d22b5ed6c2b0983a22326d"
+          test "$(git -C rigging-owner hash-object src/axm_animal_design/bilateral_deformed_tangent_frames.py)" = "fbade964b3305d70775d196232ad2cd4671d0eac"
+          test "$(git -C rigging-owner hash-object src/axm_animal_design/bilateral_uv_tangent_basis.py)" = "ba0b4e620f132413606177358e47bd32ae4d4965"
+
+      - name: Checkout exact Rigging plan and weighting-profile donor
+        uses: actions/checkout@v4
+        with:
+          repository: mike-axiom-mir/axm-animal-design
+          ref: 04760112deb81a8d145226fe7ee02923107c9916
+          path: rig-donor
+          fetch-depth: 1
+
+      - name: Verify exact Rigging plan donor
+        run: test "$(git -C rig-donor rev-parse HEAD)" = "04760112deb81a8d145226fe7ee02923107c9916"
+
+      - name: Download and verify exact retained Rigging reconstruction artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          rm -rf rigging-evidence /tmp/axm-rigging-reconstruction.zip
+          mkdir -p rigging-evidence
+          gh api repos/${{ github.repository }}/actions/artifacts/10476642320/zip > /tmp/axm-rigging-reconstruction.zip
+          test "$(sha256sum /tmp/axm-rigging-reconstruction.zip | awk '{print $1}')" = "2d11836cc7c1ada5146752d0b6205d0e4f476cd085ee8be4964e2f024f70fa58"
+          unzip -q /tmp/axm-rigging-reconstruction.zip -d rigging-evidence
+          test -n "$(find rigging-evidence -name 'post-skin-owner-frame-reconstruction-receipt.json' -print -quit)"
+
+      - name: Download and verify exact retained Technical Art transport artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          rm -rf ta-evidence /tmp/axm-ta.zip
+          mkdir -p ta-evidence
+          gh api repos/${{ github.repository }}/actions/artifacts/10474385703/zip > /tmp/axm-ta.zip
+          test "$(sha256sum /tmp/axm-ta.zip | awk '{print $1}')" = "7fc2a7f5d745da593e8762efa98e13661f84a057b1eb60921d576c366e71d7bb"
+          unzip -q /tmp/axm-ta.zip -d ta-evidence
+          TA_GLB="$(find "$GITHUB_WORKSPACE/ta-evidence" -name 'animal_selected003_right_mirror_rigged_uv_tangent_41key.glb' -print -quit)"
+          TA_RECEIPT="$(find "$GITHUB_WORKSPACE/ta-evidence" -name 'uc_rigged_uv_tangent_transport_receipt.json' -print -quit)"
+          test -n "$TA_GLB"
+          test -n "$TA_RECEIPT"
+          test "$(sha256sum "$TA_GLB" | awk '{print $1}')" = "ecb122e3274929c3d99bc8e29a472aaa2657bcb16b13331a4f1972bb6ec6b493"
+          grep -q '4649d144841fbd1f3f43e9c7deb6f37b91fbd93d' "$TA_RECEIPT"
+          echo "AXM_TA_GLB=$TA_GLB" >> "$GITHUB_ENV"
+          echo "AXM_TA_RECEIPT=$TA_RECEIPT" >> "$GITHUB_ENV"
+          echo "AXM_RIG_PLAN=$GITHUB_WORKSPACE/rig-donor/examples/quadruped_rig_probe_001.json" >> "$GITHUB_ENV"
+          echo "AXM_WEIGHTING_PROFILE=$GITHUB_WORKSPACE/rig-donor/examples/quadruped_weighting_refinement_001.json" >> "$GITHUB_ENV"
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Compile Materials additions
+        working-directory: animal
+        run: python -m compileall -q tools
+
+      - name: Run full inherited Animal suite
+        working-directory: animal
+        env:
+          PYTHONPATH: src
+          AXM_RIG_PLAN: ../rig-donor/examples/quadruped_rig_probe_001.json
+          AXM_WEIGHTING_PROFILE: ../rig-donor/examples/quadruped_weighting_refinement_001.json
+        run: python -m unittest discover -s tests -v
+
+      - name: Install image verifier dependency
+        if: matrix.python-version == '3.11'
+        run: python -m pip install --disable-pip-version-check pillow
+
+      - name: Setup Godot target host
+        if: matrix.python-version == '3.11'
+        uses: chickensoft-games/setup-godot@v2
+        with:
+          version: 4.7.2
+          use-dotnet: false
+          include-templates: false
+
+      - name: Install virtual display when needed
+        if: matrix.python-version == '3.11'
+        run: |
+          if ! command -v xvfb-run >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y xvfb
+          fi
+
+      - name: Build exact transported-frame lookdev payload from owner code
+        if: matrix.python-version == '3.11'
+        working-directory: animal
+        env:
+          PYTHONPATH: ../rigging-owner/src
+        run: |
+          rm -rf evidence/materials-animal-transported-frame-lookdev-001
+          mkdir -p evidence/materials-animal-transported-frame-lookdev-001/renders
+          python tools/build_animal_transported_frame_lookdev_payload.py \
+            --source ../rigging-owner/examples/quadruped_neutral_001.json \
+            --left-profile ../rigging-owner/examples/quadruped_elbow_source_successor_003.json \
+            --bilateral-profile ../rigging-owner/examples/quadruped_elbow_bilateral_successor_003.json \
+            --rig-plan "$AXM_RIG_PLAN" \
+            --weighting-profile "$AXM_WEIGHTING_PROFILE" \
+            --technical-art-receipt "$AXM_TA_RECEIPT" \
+            --technical-art-glb "$AXM_TA_GLB" \
+            --rigging-reconstruction-head 81ab44eab2e13bed95187610a476be2b2c4667a7 \
+            --rigging-reconstruction-module-blob c9916c62e2081922b8eb7ec0b3cd1c25c019b2f6 \
+            --rigging-transport-audit-module-blob 42f31fc5cb95426e89d22b5ed6c2b0983a22326d \
+            --out evidence/materials-animal-transported-frame-lookdev-001/review-payload.json
+          grep -q 'PASS_TRANSPORTED_POST_SKIN_OWNER_FRAME_RECONSTRUCTION_41_KEYS' evidence/materials-animal-transported-frame-lookdev-001/review-payload.json
+          grep -q '"owner_reconstruction_algorithm_copied_into_materials": false' evidence/materials-animal-transported-frame-lookdev-001/review-payload.json
+
+      - name: Fail closed on Rigging reconstruction provenance mutation
+        if: matrix.python-version == '3.11'
+        working-directory: animal
+        env:
+          PYTHONPATH: ../rigging-owner/src
+        run: |
+          if python tools/build_animal_transported_frame_lookdev_payload.py \
+            --source ../rigging-owner/examples/quadruped_neutral_001.json \
+            --left-profile ../rigging-owner/examples/quadruped_elbow_source_successor_003.json \
+            --bilateral-profile ../rigging-owner/examples/quadruped_elbow_bilateral_successor_003.json \
+            --rig-plan "$AXM_RIG_PLAN" \
+            --weighting-profile "$AXM_WEIGHTING_PROFILE" \
+            --technical-art-receipt "$AXM_TA_RECEIPT" \
+            --technical-art-glb "$AXM_TA_GLB" \
+            --rigging-reconstruction-head 0000000000000000000000000000000000000000 \
+            --rigging-reconstruction-module-blob c9916c62e2081922b8eb7ec0b3cd1c25c019b2f6 \
+            --rigging-transport-audit-module-blob 42f31fc5cb95426e89d22b5ed6c2b0983a22326d \
+            --out /tmp/invalid-materials-frame-payload.json; then
+            echo 'mutated Rigging provenance unexpectedly passed' >&2
+            exit 1
+          fi
+
+      - name: Validate Godot transported-frame lookdev project
+        if: matrix.python-version == '3.11'
+        working-directory: animal
+        run: godot --headless --path evidence/godot_animal_transported_frame_lookdev --editor --quit
+
+      - name: Capture exact target-host transported-frame A/B
+        if: matrix.python-version == '3.11'
+        working-directory: animal
+        run: |
+          set -euo pipefail
+          timeout 300s xvfb-run --auto-servernum --server-args="-screen 0 960x720x24" \
+            godot \
+            --display-driver x11 \
+            --rendering-method gl_compatibility \
+            --path evidence/godot_animal_transported_frame_lookdev -- \
+            --payload "$(pwd)/evidence/materials-animal-transported-frame-lookdev-001/review-payload.json" \
+            --out-dir "$(pwd)/evidence/materials-animal-transported-frame-lookdev-001/renders"
+
+      - name: Verify and summarize transported-frame real-render evidence
+        if: matrix.python-version == '3.11'
+        working-directory: animal
+        run: |
+          python tools/verify_animal_transported_frame_lookdev.py \
+            --payload evidence/materials-animal-transported-frame-lookdev-001/review-payload.json \
+            --telemetry evidence/materials-animal-transported-frame-lookdev-001/target-host-telemetry.json \
+            --renders evidence/materials-animal-transported-frame-lookdev-001/renders \
+            --materials-head "$(git rev-parse HEAD)" \
+            --out evidence/materials-animal-transported-frame-lookdev-001/materials-transported-frame-evidence.json
+          git rev-parse HEAD > evidence/materials-animal-transported-frame-lookdev-001/exact-materials-head.txt
+          printf '%s\n' '81ab44eab2e13bed95187610a476be2b2c4667a7' > evidence/materials-animal-transported-frame-lookdev-001/exact-rigging-reconstruction-head.txt
+          printf '%s\n' 'ecb122e3274929c3d99bc8e29a472aaa2657bcb16b13331a4f1972bb6ec6b493' > evidence/materials-animal-transported-frame-lookdev-001/exact-technical-art-glb-sha256.txt
+          cat > evidence/materials-animal-transported-frame-lookdev-001/README.txt <<'EOF'
+          Materials / LookDev receiving evidence only.
+          Same transported skinned positions, UVs, topology, periodic tangent-space probe, material, lights and cameras are rendered with: (1) the accepted Rigging owner-rederived deformed frame, (2) Technical Art's static NORMAL/TANGENT after skinning plus the already-measured Gram-Schmidt tangent witness, (3) Rigging's post-skin position-derived owner-frame reconstruction, and (4) an explicit flipped-handedness negative control.
+          Rigging owns the reconstruction algorithm and Technical Art owns any transport adoption. Materials only measures the target-host appearance consequence. No production normal map, Runtime implementation, final Art/QA acceptance, CANON or production-readiness claim is made.
+          EOF
+
+      - name: Upload exact Materials transported-frame evidence
+        if: ${{ always() && matrix.python-version == '3.11' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: animal-materials-transported-frame-lookdev-${{ github.event.pull_request.head.sha || github.sha }}
+          path: animal/evidence/materials-animal-transported-frame-lookdev-001
+          if-no-files-found: error
+          retention-days: 30
