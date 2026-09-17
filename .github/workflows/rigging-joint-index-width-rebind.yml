@@ -14,7 +14,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ['3.11', '3.13']
+        python: ['3.11', '3.13']
     steps:
       - name: Checkout exact Rigging head
         uses: actions/checkout@v4
@@ -77,7 +77,7 @@ jobs:
 
       - uses: actions/setup-python@v5
         with:
-          python-version: ${{ matrix.python-version }}
+          python-version: ${{ matrix.python }}
 
       - name: Compile
         working-directory: animal
@@ -90,7 +90,7 @@ jobs:
         run: python -m unittest discover -s tests -v
 
       - name: Build exact joint-index width Rigging rebind evidence
-        if: matrix.python-version == '3.11'
+        if: matrix.python == '3.11'
         working-directory: animal
         env:
           PYTHONPATH: src
@@ -117,45 +117,8 @@ jobs:
           grep -q '"runtime_or_controller_accepted": false' evidence/rigging-joint-index-width-rebind-001/joint-index-width-rigging-rebind-receipt.json
           grep -q '"deformed_direction_frame_equivalence_claimed": false' evidence/rigging-joint-index-width-rebind-001/joint-index-width-rigging-rebind-receipt.json
 
-      - name: Publish exact rebind summary to PR
-        if: matrix.python-version == '3.11' && github.event_name == 'pull_request'
-        working-directory: animal
-        env:
-          GH_TOKEN: ${{ github.token }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-          REPOSITORY: ${{ github.repository }}
-        run: |
-          python - <<'PY'
-          import json
-          import subprocess
-          from pathlib import Path
-
-          receipt = json.loads(Path('evidence/rigging-joint-index-width-rebind-001/joint-index-width-rigging-rebind-receipt.json').read_text(encoding='utf-8'))
-          head = subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip()
-          storage = receipt['storage_boundary']
-          motion = receipt['motion_boundary']
-          mutation = receipt['negative_controls']['rigid_child_joint_identity_mutation']
-          hold = receipt['preserved_hold']
-          body = f'''### Rigging JOINTS_0 width rebind — exact head `{head}`
-
-Scoped result: **`{receipt['state']}`**
-
-- exact Technical Art producer: `{receipt['exact_identities']['producer_technical_art_head']}` / GLB `{receipt['exact_identities']['producer_glb_sha256']}`;
-- JOINTS_0 storage: `{storage['control_joint_component_type']} -> {storage['producer_joint_component_type']}` with `{storage['decoded_joint_scalar_count']}` decoded joint scalars exact;
-- decoded weights / positions / normals / tangents / UVs / indices / animation keys / joint pivot remain exact across producer identities;
-- all `{motion['authored_key_count']}` exact authored keys rerun: control-vs-producer max skinned-position residual `{motion['maximum_control_vs_producer_position_residual_m']}` m; producer-vs-owner max `{motion['maximum_producer_vs_owner_position_residual_m']}` m;
-- representative samples retained at `0/10/20/30/40`;
-- rigid-child joint identity mutation produces `{mutation['position_signal_m']}` m at peak and is detected;
-- historical direction-frame HOLD stays explicit: normal excess `{hold['static_normal_deformation_excess_deg']}`°, corrected tangent excess `{hold['static_corrected_tangent_deformation_excess_deg']}`°; this lane does not recompute or clear it.
-
-Animation accepted = `false`; Runtime/controller accepted = `false`; Technical Art reconstruction adopted = `false`; deformed direction-frame equivalence claimed = `false`; CANON = `false`.
-'''
-          Path('/tmp/rigging-joint-width-comment.md').write_text(body, encoding='utf-8')
-          PY
-          gh pr comment "$PR_NUMBER" --repo "$REPOSITORY" --body-file /tmp/rigging-joint-width-comment.md
-
       - name: Upload exact Rigging rebind evidence
-        if: ${{ always() && matrix.python-version == '3.11' }}
+        if: ${{ always() && matrix.python == '3.11' }}
         uses: actions/upload-artifact@v4
         with:
           name: animal-rigging-joint-index-width-rebind-${{ github.event.pull_request.head.sha || github.sha }}
