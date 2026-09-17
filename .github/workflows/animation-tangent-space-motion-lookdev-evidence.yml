@@ -1,0 +1,222 @@
+name: Animation tangent-space shaded motion review
+
+on:
+  push:
+    branches:
+      - studio/animation-quadruped-articulation-loop-001
+    paths:
+      - "tools/build_animation_tangent_space_motion_payload.py"
+      - "tools/verify_animation_tangent_space_motion.py"
+      - ".github/workflows/animation-tangent-space-motion-lookdev-evidence.yml"
+  pull_request:
+    paths:
+      - "tools/build_animation_tangent_space_motion_payload.py"
+      - "tools/verify_animation_tangent_space_motion.py"
+      - ".github/workflows/animation-tangent-space-motion-lookdev-evidence.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  tangent-space-motion-review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out exact Animation lane head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+          path: animal
+
+      - name: Bind review to exact Animation lineage
+        working-directory: animal
+        shell: bash
+        run: |
+          set -euo pipefail
+          EXACT_HEAD_SHA="$(git rev-parse HEAD)"
+          echo "EXACT_HEAD_SHA=${EXACT_HEAD_SHA}" >> "$GITHUB_ENV"
+          git merge-base --is-ancestor 06f76c07e1c7b6efef7f78277a8d2a6e2e27140b HEAD
+
+      - name: Check out exact Materials tangent-space renderer donor
+        uses: actions/checkout@v4
+        with:
+          repository: mike-axiom-mir/axm-animal-design
+          ref: e9d5c451b16bd05d2419248f58bef911f83dc1e8
+          path: materials-donor
+
+      - name: Pin exact Materials renderer identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C materials-donor rev-parse HEAD)" = "e9d5c451b16bd05d2419248f58bef911f83dc1e8"
+          test "$(git -C materials-donor hash-object evidence/godot_animal_tangent_space_lookdev/render_review.gd)" = "252537d1544aa4e4af20bc78e54a6f886c1b9af0"
+          test "$(git -C materials-donor hash-object src/axm_animal_design/bilateral_deformed_tangent_frames.py)" = "fbade964b3305d70775d196232ad2cd4671d0eac"
+          test "$(git -C materials-donor hash-object src/axm_animal_design/bilateral_uv_tangent_basis.py)" = "ba0b4e620f132413606177358e47bd32ae4d4965"
+
+      - name: Check out exact deformed-tangent Rigging donor
+        uses: actions/checkout@v4
+        with:
+          repository: mike-axiom-mir/axm-animal-design
+          ref: 63c65d57fda0595217f86d971ff8c67f256188be
+          path: tangent-rigging
+
+      - name: Check out exact historical rig/profile donor
+        uses: actions/checkout@v4
+        with:
+          repository: mike-axiom-mir/axm-animal-design
+          ref: 04760112deb81a8d145226fe7ee02923107c9916
+          path: rig-donor
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Preserve receiving repository gates
+        working-directory: animal
+        run: |
+          set -euo pipefail
+          python -m compileall -q src tests tools
+          python -m unittest discover -s tests -v
+
+      - name: Rebuild exact current Animation tangent-motion source packet
+        working-directory: animal
+        run: |
+          set -euo pipefail
+          rm -rf evidence/animation-tangent-space-motion-review-001 tools/godot_animation_tangent_motion/generated
+          mkdir -p evidence/animation-tangent-space-motion-review-001/renders
+          python tools/build_bilateral_tangent_motion_godot_evidence.py \
+            --rigging-root ../tangent-rigging \
+            --rig-donor-root ../rig-donor \
+            --rigging-head 63c65d57fda0595217f86d971ff8c67f256188be \
+            --clip examples/quadruped_articulation_loop_001.json \
+            --out evidence/animation-tangent-space-motion-review-001/source-motion \
+            --payload-dir tools/godot_animation_tangent_motion/generated
+
+      - name: Reject wrong Materials renderer identity
+        working-directory: animal
+        run: |
+          set -euo pipefail
+          if python tools/build_animation_tangent_space_motion_payload.py \
+            --motion-receipt evidence/animation-tangent-space-motion-review-001/source-motion/bilateral_deformed_tangent_motion_receipt.json \
+            --motion-frames evidence/animation-tangent-space-motion-review-001/source-motion/bilateral_deformed_tangent_motion_frames.json \
+            --motion-payload tools/godot_animation_tangent_motion/generated/tangent_motion_payload.json \
+            --materials-head e9d5c451b16bd05d2419248f58bef911f83dc1e8 \
+            --materials-renderer-blob 0000000000000000000000000000000000000000 \
+            --out /tmp/negative-motion-review-payload.json \
+            --receipt-out /tmp/negative-motion-review-receipt.json; then
+            echo "wrong Materials renderer identity unexpectedly passed"
+            exit 1
+          fi
+
+      - name: Build exact authored-sample review payload
+        working-directory: animal
+        run: |
+          set -euo pipefail
+          python tools/build_animation_tangent_space_motion_payload.py \
+            --motion-receipt evidence/animation-tangent-space-motion-review-001/source-motion/bilateral_deformed_tangent_motion_receipt.json \
+            --motion-frames evidence/animation-tangent-space-motion-review-001/source-motion/bilateral_deformed_tangent_motion_frames.json \
+            --motion-payload tools/godot_animation_tangent_motion/generated/tangent_motion_payload.json \
+            --materials-head e9d5c451b16bd05d2419248f58bef911f83dc1e8 \
+            --materials-renderer-blob 252537d1544aa4e4af20bc78e54a6f886c1b9af0 \
+            --out evidence/animation-tangent-space-motion-review-001/review-payload.json \
+            --receipt-out evidence/animation-tangent-space-motion-review-001/payload-build-receipt.json
+          printf '%s\n' "$EXACT_HEAD_SHA" > evidence/animation-tangent-space-motion-review-001/exact-animation-head.txt
+          printf '%s\n' 'e9d5c451b16bd05d2419248f58bef911f83dc1e8' > evidence/animation-tangent-space-motion-review-001/exact-materials-head.txt
+
+      - name: Install review dependencies
+        run: python -m pip install --disable-pip-version-check pillow
+
+      - name: Setup pinned Godot target host
+        uses: chickensoft-games/setup-godot@v2
+        with:
+          version: 4.7.2
+          use-dotnet: false
+          include-templates: false
+
+      - name: Install virtual display when needed
+        run: |
+          if ! command -v xvfb-run >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y xvfb
+          fi
+
+      - name: Validate exact Materials donor project
+        run: godot --headless --path materials-donor/evidence/godot_animal_tangent_space_lookdev --editor --quit
+
+      - name: Capture all exact authored samples with unchanged Materials tangent probe
+        shell: bash
+        run: |
+          set -euo pipefail
+          timeout 420s xvfb-run --auto-servernum --server-args="-screen 0 960x720x24" \
+            godot \
+            --display-driver x11 \
+            --rendering-method gl_compatibility \
+            --path materials-donor/evidence/godot_animal_tangent_space_lookdev -- \
+            --payload "$(pwd)/animal/evidence/animation-tangent-space-motion-review-001/review-payload.json" \
+            --out-dir "$(pwd)/animal/evidence/animation-tangent-space-motion-review-001/renders" \
+            --rigging-tangent-head 63c65d57fda0595217f86d971ff8c67f256188be \
+            --rigging-tangent-module-blob fbade964b3305d70775d196232ad2cd4671d0eac \
+            --geometry-head ca4bb8a2f144231f8755eacc980785d1807b79db \
+            --geometry-module-blob ba0b4e620f132413606177358e47bd32ae4d4965
+
+      - name: Verify shaded discrete loop and build review media
+        working-directory: animal
+        run: |
+          set -euo pipefail
+          python tools/verify_animation_tangent_space_motion.py \
+            --payload evidence/animation-tangent-space-motion-review-001/review-payload.json \
+            --build-receipt evidence/animation-tangent-space-motion-review-001/payload-build-receipt.json \
+            --telemetry evidence/animation-tangent-space-motion-review-001/target-host-telemetry.json \
+            --renders evidence/animation-tangent-space-motion-review-001/renders \
+            --out evidence/animation-tangent-space-motion-review-001/animation-shaded-motion-evidence.json \
+            --montage evidence/animation-tangent-space-motion-review-001/authored-sample-montage.png \
+            --gif-dir evidence/animation-tangent-space-motion-review-001/gifs
+          grep -q 'PASS_TARGET_HOST_TANGENT_SPACE_SHADED_AUTHORED_SAMPLE_LOOP_CAPTURED' evidence/animation-tangent-space-motion-review-001/animation-shaded-motion-evidence.json
+          cat > evidence/animation-tangent-space-motion-review-001/README.txt <<'EOF'
+          Animation-owned temporal review packet using the exact unchanged Materials PR #24 tangent-space renderer.
+          Source motion is the existing 1.0 s / 40 Hz / 41-sample smoothstep-v0 articulation pulse; no retiming, new keys, weighting, rig, UV, normal, tangent, material or shader change is made.
+          Godot captures every exact authored sample for both sides and both Materials camera contexts using the periodic tangent-space diagnostic. Four GIFs encode samples 0..39 at 25 ms each only as review media; they are not wall-clock engine pacing evidence.
+          PASS means the exact shaded discrete authored-sample loop reached the target host, visibly differs at peak, and returns to a byte-identical neutral endpoint in each retained context. Continuous interpolation, final motion quality, final tangent-space look, production transport, controller/state-machine behavior, gameplay, CANON and production readiness remain held.
+          EOF
+
+      - name: Upload exact shaded tangent-space motion review evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: quadruped-animation-tangent-space-motion-review-${{ env.EXACT_HEAD_SHA }}
+          path: animal/evidence/animation-tangent-space-motion-review-001
+          if-no-files-found: error
+          retention-days: 30
+
+  python-313-compatibility:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          path: animal
+      - uses: actions/checkout@v4
+        with:
+          repository: mike-axiom-mir/axm-animal-design
+          ref: 63c65d57fda0595217f86d971ff8c67f256188be
+          path: tangent-rigging
+      - uses: actions/checkout@v4
+        with:
+          repository: mike-axiom-mir/axm-animal-design
+          ref: 04760112deb81a8d145226fe7ee02923107c9916
+          path: rig-donor
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Compile, test, and rebuild review payload
+        working-directory: animal
+        run: |
+          set -euo pipefail
+          python -m compileall -q src tests tools
+          python -m unittest discover -s tests -v
+          python tools/build_bilateral_tangent_motion_godot_evidence.py --rigging-root ../tangent-rigging --rig-donor-root ../rig-donor --rigging-head 63c65d57fda0595217f86d971ff8c67f256188be --clip examples/quadruped_articulation_loop_001.json --out /tmp/motion-source-313 --payload-dir /tmp/motion-payload-313
+          python tools/build_animation_tangent_space_motion_payload.py --motion-receipt /tmp/motion-source-313/bilateral_deformed_tangent_motion_receipt.json --motion-frames /tmp/motion-source-313/bilateral_deformed_tangent_motion_frames.json --motion-payload /tmp/motion-payload-313/tangent_motion_payload.json --materials-head e9d5c451b16bd05d2419248f58bef911f83dc1e8 --materials-renderer-blob 252537d1544aa4e4af20bc78e54a6f886c1b9af0 --out /tmp/motion-review-payload-313.json --receipt-out /tmp/motion-review-build-313.json
+          grep -q 'PASS_TANGENT_SPACE_SHADED_MOTION_REVIEW_PAYLOAD_BUILD' /tmp/motion-review-build-313.json
