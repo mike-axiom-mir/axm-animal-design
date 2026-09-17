@@ -1,0 +1,190 @@
+name: Runtime Animal joint-index width budget evidence
+
+on:
+  push:
+    branches: [studio/runtime-animal-joint-index-width-budget-001]
+    paths:
+      - ".github/workflows/runtime-animal-joint-index-width-budget.yml"
+      - "src/axm_animal_design/runtime_joint_index_width_budget.py"
+      - "tests/test_runtime_joint_index_width_budget.py"
+      - "tools/build_runtime_animal_joint_index_budget.py"
+      - "tools/verify_runtime_animal_joint_index_budget.py"
+      - "evidence/godot_runtime_animal_joint_index_budget/**"
+  pull_request:
+    paths:
+      - ".github/workflows/runtime-animal-joint-index-width-budget.yml"
+      - "src/axm_animal_design/runtime_joint_index_width_budget.py"
+      - "tests/test_runtime_joint_index_width_budget.py"
+      - "tools/build_runtime_animal_joint_index_budget.py"
+      - "tools/verify_runtime_animal_joint_index_budget.py"
+      - "evidence/godot_runtime_animal_joint_index_budget/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  exact-animal-joint-index-width-budget:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout exact Runtime head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+
+      - name: Bind exact Technical Art transport parent
+        run: |
+          set -euo pipefail
+          git rev-parse HEAD > exact-head.txt
+          test "$(git rev-parse HEAD)" = "${{ github.event.pull_request.head.sha || github.sha }}"
+          git cat-file -e 4649d144841fbd1f3f43e9c7deb6f37b91fbd93d^{commit}
+          git merge-base --is-ancestor 4649d144841fbd1f3f43e9c7deb6f37b91fbd93d HEAD
+          test "$(git rev-parse 4649d144841fbd1f3f43e9c7deb6f37b91fbd93d:src/axm_animal_design/uc_rigged_tangent_bridge.py)" = "90343f493389446f06d58202cb7465c98307458f"
+
+      - name: Checkout pinned current Universal Creation receiver and Godot donor
+        uses: actions/checkout@v4
+        with:
+          repository: mike-axiom-mir/axm-universal-creation
+          ref: 2a798836378d47a787221597aa8fece0fd637e6a
+          path: uc
+
+      - name: Verify exact UC receiver and Godot-probe identities
+        run: |
+          set -euo pipefail
+          test "$(git -C uc rev-parse HEAD)" = "2a798836378d47a787221597aa8fece0fd637e6a"
+          test "$(git -C uc rev-parse HEAD:capabilities/platform-hands/shared/asset-hands/rigged-gltf-codec.js)" = "b1f2e68bb6c6800af5496decc95a8044d141edc9"
+          test "$(git -C uc rev-parse HEAD:src/axm_uc/data/engine/godot_probe.gd)" = "7784a49655192bd395e8cba6065a6dfeb809df35"
+
+      - name: Download exact retained Technical Art GLB
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          rm -rf ta-evidence /tmp/axm-ta.zip
+          mkdir -p ta-evidence
+          gh api repos/${{ github.repository }}/actions/artifacts/10474385703/zip > /tmp/axm-ta.zip
+          test "$(sha256sum /tmp/axm-ta.zip | awk '{print $1}')" = "7fc2a7f5d745da593e8762efa98e13661f84a057b1eb60921d576c366e71d7bb"
+          unzip -q /tmp/axm-ta.zip -d ta-evidence
+          TA_GLB="$(find "$GITHUB_WORKSPACE/ta-evidence" -name 'animal_selected003_right_mirror_rigged_uv_tangent_41key.glb' -print -quit)"
+          test -n "$TA_GLB"
+          test "$(sha256sum "$TA_GLB" | awk '{print $1}')" = "ecb122e3274929c3d99bc8e29a472aaa2657bcb16b13331a4f1972bb6ec6b493"
+          test "$(stat -c%s "$TA_GLB")" = "11148"
+          echo "AXM_TA_GLB=$TA_GLB" >> "$GITHUB_ENV"
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Compile and run inherited Animal suite
+        run: |
+          python -m compileall -q src tests tools
+          python -m unittest discover -s tests -v
+
+      - name: Build exact JOINTS_0 width A/B and verify current UC receiver
+        run: |
+          set -euo pipefail
+          out=evidence/runtime_animal_joint_index_width_budget_001
+          rm -rf "$out"
+          python tools/build_runtime_animal_joint_index_budget.py \
+            --control-glb "$AXM_TA_GLB" \
+            --uc-root uc \
+            --technical-art-head 4649d144841fbd1f3f43e9c7deb6f37b91fbd93d \
+            --runtime-head "$(git rev-parse HEAD)" \
+            --out-dir "$out"
+          grep -q 'PASS_ANIMAL_JOINT_INDEX_WIDTH_COMPACTION_PAYLOAD_AND_UC_RECEIVER' "$out/build-report.json"
+
+      - name: Download pinned Godot 4.7.2
+        env:
+          GODOT_URL: https://github.com/godotengine/godot-builds/releases/download/4.7.2-stable/Godot_v4.7.2-stable_linux.x86_64.zip
+          GODOT_SHA256: cadd3204e728a35d3f13adb7fd0d7902636b79f6b95c40c265eb73b6c35329e4
+        run: |
+          set -euo pipefail
+          mkdir -p .godot-bin
+          curl --fail --location --retry 3 --retry-delay 2 "$GODOT_URL" --output .godot-bin/godot.zip
+          echo "$GODOT_SHA256  .godot-bin/godot.zip" | sha256sum --check --strict
+          unzip -q .godot-bin/godot.zip -d .godot-bin
+          chmod +x .godot-bin/Godot_v4.7.2-stable_linux.x86_64
+          .godot-bin/Godot_v4.7.2-stable_linux.x86_64 --version
+
+      - name: Install virtual display when needed
+        run: |
+          if ! command -v xvfb-run >/dev/null 2>&1; then sudo apt-get update && sudo apt-get install -y xvfb; fi
+
+      - name: Validate bounded Godot project
+        run: .godot-bin/Godot_v4.7.2-stable_linux.x86_64 --headless --path evidence/godot_runtime_animal_joint_index_budget --editor --quit
+
+      - name: Run real Godot control/candidate import and render A/B
+        run: |
+          set -euo pipefail
+          out="$(pwd)/evidence/runtime_animal_joint_index_width_budget_001"
+          for mode in control candidate; do
+            root="$out/$mode"
+            mkdir -p "$root"
+            cp evidence/godot_runtime_animal_joint_index_budget/project.godot "$root/project.godot"
+            cp uc/src/axm_uc/data/engine/godot_probe.gd "$root/godot_probe.gd"
+            cp "$out/request.json" "$root/request.json"
+            if [ "$mode" = control ]; then
+              cp "$out/control-u16-joints.glb" "$root/asset.glb"
+            else
+              cp "$out/candidate-u8-joints.glb" "$root/asset.glb"
+            fi
+            xvfb-run --auto-servernum --server-args="-screen 0 1024x768x24" \
+              .godot-bin/Godot_v4.7.2-stable_linux.x86_64 \
+              --display-driver x11 --rendering-method gl_compatibility \
+              --path "$root" --script res://godot_probe.gd \
+              2>&1 | tee "$root/godot.log"
+            test -s "$root/worker-result.json"
+            test -s "$root/view-00.png"
+            test -s "$root/view-00-coverage.png"
+            test -s "$root/view-01.png"
+            test -s "$root/view-01-coverage.png"
+            rm -rf "$root/.godot"
+          done
+
+      - name: Verify exact Runtime import-budget and visual A/B
+        run: |
+          set -euo pipefail
+          out=evidence/runtime_animal_joint_index_width_budget_001
+          python tools/verify_runtime_animal_joint_index_budget.py \
+            --build-report "$out/build-report.json" \
+            --control-root "$out/control" \
+            --candidate-root "$out/candidate" \
+            --output "$out/report.json"
+          cp exact-head.txt "$out/exact-head.txt"
+          grep -q 'PASS_ANIMAL_GLB_JOINT_INDEX_WIDTH_COMPACTION_IMPORT_BUDGET' "$out/report.json"
+
+      - name: Exercise fail-closed component-width control
+        run: |
+          set -euo pipefail
+          out=evidence/runtime_animal_joint_index_width_budget_001
+          cp "$out/build-report.json" "$out/build-report-mutated.json"
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          path = Path('evidence/runtime_animal_joint_index_width_budget_001/build-report-mutated.json')
+          data = json.loads(path.read_text())
+          data['representation']['candidate_component_type'] = 5123
+          path.write_text(json.dumps(data, indent=2, sort_keys=True) + '\n')
+          PY
+          if python tools/verify_runtime_animal_joint_index_budget.py \
+            --build-report "$out/build-report-mutated.json" \
+            --control-root "$out/control" \
+            --candidate-root "$out/candidate" \
+            --output "$out/should-not-pass.json"; then
+            echo 'negative component-width control unexpectedly passed' >&2
+            exit 1
+          fi
+          echo PASS_FAIL_CLOSED_COMPONENT_WIDTH_CONTROL
+          rm -f "$out/should-not-pass.json"
+
+      - name: Upload exact Runtime evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: runtime-animal-joint-index-width-budget-001-${{ github.event.pull_request.head.sha || github.sha }}
+          path: evidence/runtime_animal_joint_index_width_budget_001
+          if-no-files-found: error
+          retention-days: 30
