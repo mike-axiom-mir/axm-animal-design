@@ -1,0 +1,112 @@
+name: UC deformed direction-frame gate evidence
+
+on:
+  pull_request:
+    paths:
+      - "src/axm_animal_design/uc_deformed_frame_gate.py"
+      - "tools/build_uc_deformed_frame_gate_evidence.py"
+      - "tests/test_uc_deformed_frame_gate.py"
+      - ".github/workflows/uc-deformed-frame-gate.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  rigging-observation-to-current-uc-capability-gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout exact Technical Art gate head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          path: animal-ta
+          fetch-depth: 0
+
+      - name: Bind exact Technical Art gate head
+        shell: bash
+        run: |
+          set -euo pipefail
+          TA_HEAD="$(git -C animal-ta rev-parse HEAD)"
+          echo "TA_HEAD=${TA_HEAD}" >> "$GITHUB_ENV"
+          if [ -n "${{ github.event.pull_request.head.sha }}" ]; then
+            test "${TA_HEAD}" = "${{ github.event.pull_request.head.sha }}"
+          else
+            test "${TA_HEAD}" = "${GITHUB_SHA}"
+          fi
+
+      - name: Checkout current Universal Creation receiver pin
+        uses: actions/checkout@v4
+        with:
+          repository: mike-axiom-mir/axm-universal-creation
+          ref: eb571ebd67b0e6c82387f1da32700e9be844b2af
+          path: uc
+
+      - name: Verify generic UC codec remains unchanged
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C uc rev-parse HEAD)" = "eb571ebd67b0e6c82387f1da32700e9be844b2af"
+          test "$(git -C uc rev-parse HEAD:capabilities/platform-hands/shared/asset-hands/rigged-gltf-codec.js)" = "b1f2e68bb6c6800af5496decc95a8044d141edc9"
+
+      - name: Download exact Rigging deformation observation artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/rigging-audit"
+          gh api repos/mike-axiom-mir/axm-animal-design/actions/artifacts/10475208614/zip > "$RUNNER_TEMP/rigging-audit.zip"
+          echo "05faacebcbc88a75ebf607d4b1c57aa7326be8894f2cd313a0962b2d44971f9b  $RUNNER_TEMP/rigging-audit.zip" | sha256sum -c -
+          unzip -q "$RUNNER_TEMP/rigging-audit.zip" -d "$RUNNER_TEMP/rigging-audit"
+          test "$(cat "$RUNNER_TEMP/rigging-audit/exact-rigging-head.txt")" = "fdfeb0e32d8b51107e9bd648210a1eaf8aaf7f3e"
+          test "$(cat "$RUNNER_TEMP/rigging-audit/technical-art-head.txt")" = "4649d144841fbd1f3f43e9c7deb6f37b91fbd93d"
+          test "$(cat "$RUNNER_TEMP/rigging-audit/technical-art-glb-sha256.txt")" = "ecb122e3274929c3d99bc8e29a472aaa2657bcb16b13331a4f1972bb6ec6b493"
+          echo "9a38c5a6659dd6c012c4d514e3fe032bfd727d5b19ca79cd26352dca4cc3fad0  $RUNNER_TEMP/rigging-audit/transported-tangent-deformation-rigging-receipt.json" | sha256sum -c -
+          grep -q 'PASS_TRANSPORTED_SKINNED_POSITION_EQUIVALENCE__HOLD_DEFORMED_NORMAL_TANGENT_EQUIVALENCE' "$RUNNER_TEMP/rigging-audit/transported-tangent-deformation-rigging-receipt.json"
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Preserve Technical Art receiving tests
+        working-directory: animal-ta
+        run: |
+          python -m compileall -q src tests tools
+          PYTHONPATH=src python -m unittest tests.test_uc_deformed_frame_gate -v
+
+      - name: Build fail-closed deformed direction-frame capability decision
+        working-directory: animal-ta
+        env:
+          PYTHONPATH: src
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf evidence/uc_deformed_frame_gate
+          python tools/build_uc_deformed_frame_gate_evidence.py \
+            --rigging-receipt "$RUNNER_TEMP/rigging-audit/transported-tangent-deformation-rigging-receipt.json" \
+            --rigging-head fdfeb0e32d8b51107e9bd648210a1eaf8aaf7f3e \
+            --rigging-artifact-id 10475208614 \
+            --rigging-artifact-sha256 05faacebcbc88a75ebf607d4b1c57aa7326be8894f2cd313a0962b2d44971f9b \
+            --technical-art-head "$TA_HEAD" \
+            --transport-head 4649d144841fbd1f3f43e9c7deb6f37b91fbd93d \
+            --glb-sha256 ecb122e3274929c3d99bc8e29a472aaa2657bcb16b13331a4f1972bb6ec6b493 \
+            --uc-head eb571ebd67b0e6c82387f1da32700e9be844b2af \
+            --uc-codec-blob b1f2e68bb6c6800af5496decc95a8044d141edc9 \
+            --out evidence/uc_deformed_frame_gate
+          grep -q 'PASS_STATIC_SKIN_TRANSPORT__HOLD_DEFORMED_DIRECTION_FRAME' evidence/uc_deformed_frame_gate/uc_deformed_direction_frame_gate_evidence.json
+          grep -q 'PASS_REJECTED' evidence/uc_deformed_frame_gate/uc_deformed_direction_frame_gate_evidence.json
+          cp "$RUNNER_TEMP/rigging-audit/transported-tangent-deformation-rigging-receipt.json" evidence/uc_deformed_frame_gate/exact-rigging-observation.json
+          test "$(cat evidence/uc_deformed_frame_gate/technical-art-gate-head.txt)" = "$TA_HEAD"
+          test "$(cat evidence/uc_deformed_frame_gate/uc-head.txt)" = "eb571ebd67b0e6c82387f1da32700e9be844b2af"
+          test "$(cat evidence/uc_deformed_frame_gate/uc-codec-blob.txt)" = "b1f2e68bb6c6800af5496decc95a8044d141edc9"
+
+      - name: Upload exact deformed direction-frame gate evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: animal-current-uc-deformed-frame-gate-${{ github.event.pull_request.head.sha || github.sha }}
+          path: animal-ta/evidence/uc_deformed_frame_gate
+          if-no-files-found: error
+          retention-days: 30
