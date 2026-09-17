@@ -14,21 +14,37 @@ jobs:
     steps:
       - name: Checkout animal-design candidate
         uses: actions/checkout@v4
+        with:
+          path: animal
+      - name: Checkout exact merged Universal Creation observer
+        uses: actions/checkout@v4
+        with:
+          repository: mike-axiom-mir/axm-universal-creation
+          ref: 41b4d9134e4d2e5f4fadaada2a1d6a56eed92ab0
+          path: uc
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
       - name: Compile geometry diagnostics
+        working-directory: animal
         run: python -m compileall -q src tests tools
       - name: Run full animal-design unit suite
+        working-directory: animal
         run: python -m unittest discover -s tests -v
-      - name: Build exact static self-intersection evidence
+      - name: Rebuild historical Animal-local self-intersection evidence
+        working-directory: animal
         env:
           PYTHONPATH: src
         run: python tools/build_self_intersection_evidence.py
+      - name: Rebind exact candidate to merged UC self-intersection observer
+        working-directory: animal
+        env:
+          PYTHONPATH: src:../uc/src
+        run: python tools/build_uc_self_intersection_rebind_evidence.py
       - name: Upload exact self-intersection evidence
         if: matrix.python-version == '3.11'
         uses: actions/upload-artifact@v4
         with:
           name: front-left-connected-chain-001-self-intersection-evidence
-          path: evidence/topology-self-intersection/
+          path: animal/evidence/topology-self-intersection/
           if-no-files-found: error
