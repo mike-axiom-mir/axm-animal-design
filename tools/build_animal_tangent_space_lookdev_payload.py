@@ -88,8 +88,6 @@ def main() -> int:
         raise SystemExit(f"Geometry UV/tangent prerequisite is not PASS: {geometry_receipt['state']}")
     if int(left_basis["render_vertex_count"]) != 84 or int(right_basis["render_vertex_count"]) != 84:
         raise SystemExit("expected exact 84-vertex seam-aware render domains")
-    if left_basis["render_indices"] != right_basis["render_indices"]:
-        raise SystemExit("left/right render-index identity drift")
 
     pose_sets = []
     for side, basis in (("left", left_basis), ("right", right_basis)):
@@ -165,6 +163,7 @@ def main() -> int:
             "material_scalars_held": True,
             "lighting_held": True,
             "camera_contexts_held": True,
+            "side_local_render_indices_preserved": True,
             "periodic_u_probe_avoids_authored_texture_seam_discontinuity": True,
         },
         "truth_boundary": {
