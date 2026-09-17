@@ -88,7 +88,7 @@ jobs:
           python -m compileall -q src tests tools
           python -m unittest discover -s tests -v
 
-      - name: Build exact WEIGHTS_0 width A/B and verify current UC receiver
+      - name: Build exact WEIGHTS_0 width A/B and retain current UC HOLD
         env:
           PYTHONPATH: src
         run: |
@@ -96,7 +96,8 @@ jobs:
           out=evidence/runtime_animal_weight_width_budget_001
           rm -rf "$out"
           python tools/build_runtime_animal_weight_width_budget.py --control-glb "$AXM_TA_GLB" --uc-root uc --runtime-head "$(git rev-parse HEAD)" --out-dir "$out"
-          grep -q 'PASS_ANIMAL_WEIGHT_WIDTH_COMPACTION_PAYLOAD_AND_UC_RECEIVER' "$out/build-report.json"
+          grep -q 'HOLD_ANIMAL_WEIGHT_WIDTH_COMPACTION__CURRENT_UC_RIGGED_CODEC_FLOAT_ONLY' "$out/build-report.json"
+          grep -q 'WEIGHTS_0 accessor invalid' "$out/build-report.json"
 
       - name: Download pinned Godot 4.7.2
         env:
@@ -132,13 +133,13 @@ jobs:
             rm -rf "$root/.godot"
           done
 
-      - name: Verify import and visual tradeoff
+      - name: Verify Godot evidence behind current UC HOLD
         run: |
           set -euo pipefail
           out=evidence/runtime_animal_weight_width_budget_001
           python tools/verify_runtime_animal_weight_width_budget.py --build-report "$out/build-report.json" --control-root "$out/control" --candidate-root "$out/candidate" --output "$out/report.json"
           cp exact-head.txt "$out/exact-head.txt"
-          grep -q 'PASS_ANIMAL_GLB_WEIGHT_WIDTH_COMPACTION_IMPORT_BUDGET' "$out/report.json"
+          grep -q 'HOLD_ANIMAL_GLB_WEIGHT_WIDTH_COMPACTION__CURRENT_UC_RIGGED_CODEC_FLOAT_ONLY' "$out/report.json"
 
       - name: Exercise fail-closed component control
         run: |
