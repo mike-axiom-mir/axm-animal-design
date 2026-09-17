@@ -27,8 +27,10 @@ jobs:
         working-directory: animal
         run: |
           git merge-base --is-ancestor 63c65d57fda0595217f86d971ff8c67f256188be HEAD
+          git merge-base --is-ancestor fdfeb0e32d8b51107e9bd648210a1eaf8aaf7f3e HEAD
           test "$(git hash-object src/axm_animal_design/bilateral_deformed_tangent_frames.py)" = "fbade964b3305d70775d196232ad2cd4671d0eac"
           test "$(git hash-object src/axm_animal_design/bilateral_source_successor_rigging_rebind.py)" = "f0cdcd7bf2452e73070efc872f53274a5ae3bcba"
+          test "$(git hash-object src/axm_animal_design/transported_tangent_deformation_audit.py)" = "42f31fc5cb95426e89d22b5ed6c2b0983a22326d"
 
       - name: Checkout exact Technical Art transport donor
         uses: actions/checkout@v4
@@ -112,6 +114,32 @@ jobs:
           grep -q '"animation_accepted": false' evidence/rigging-transported-tangent-deformation-001/transported-tangent-deformation-rigging-receipt.json
           grep -q '"runtime_or_controller_accepted": false' evidence/rigging-transported-tangent-deformation-001/transported-tangent-deformation-rigging-receipt.json
 
+      - name: Build exact post-skin owner-frame reconstruction evidence
+        if: matrix.python-version == '3.11'
+        working-directory: animal
+        env:
+          PYTHONPATH: src
+        run: |
+          rm -rf evidence/rigging-transported-frame-reconstruction-001
+          python tools/build_transported_frame_reconstruction_constraint.py \
+            --source examples/quadruped_neutral_001.json \
+            --left-profile examples/quadruped_elbow_source_successor_003.json \
+            --bilateral-profile examples/quadruped_elbow_bilateral_successor_003.json \
+            --rig-plan "$AXM_RIG_PLAN" \
+            --weighting-profile "$AXM_WEIGHTING_PROFILE" \
+            --technical-art-receipt "$AXM_TA_RECEIPT" \
+            --technical-art-glb "$AXM_TA_GLB" \
+            --technical-art-head 4649d144841fbd1f3f43e9c7deb6f37b91fbd93d \
+            --technical-art-module-blob 90343f493389446f06d58202cb7465c98307458f \
+            --technical-art-artifact-id 10474385703 \
+            --technical-art-artifact-sha256 7fc2a7f5d745da593e8762efa98e13661f84a057b1eb60921d576c366e71d7bb \
+            --current-rigging-head "$(git rev-parse HEAD)" \
+            --out evidence/rigging-transported-frame-reconstruction-001
+          grep -q '"post_skin_owner_frame_reconstruction_established": true' evidence/rigging-transported-frame-reconstruction-001/post-skin-owner-frame-reconstruction-receipt.json
+          grep -q '"technical_art_adopted_reconstruction": false' evidence/rigging-transported-frame-reconstruction-001/post-skin-owner-frame-reconstruction-receipt.json
+          grep -q '"animation_accepted": false' evidence/rigging-transported-frame-reconstruction-001/post-skin-owner-frame-reconstruction-receipt.json
+          grep -q '"runtime_or_controller_accepted": false' evidence/rigging-transported-frame-reconstruction-001/post-skin-owner-frame-reconstruction-receipt.json
+
       - name: Publish exact Rigging evidence summary to PR
         if: matrix.python-version == '3.11' && github.event_name == 'pull_request'
         working-directory: animal
@@ -122,33 +150,43 @@ jobs:
         run: |
           python - <<'PY'
           import json
-          import os
           import subprocess
           from pathlib import Path
 
-          receipt_path = Path('evidence/rigging-transported-tangent-deformation-001/transported-tangent-deformation-rigging-receipt.json')
-          receipt = json.loads(receipt_path.read_text(encoding='utf-8'))
+          receipt = json.loads(Path('evidence/rigging-transported-tangent-deformation-001/transported-tangent-deformation-rigging-receipt.json').read_text(encoding='utf-8'))
+          reconstruction = json.loads(Path('evidence/rigging-transported-frame-reconstruction-001/post-skin-owner-frame-reconstruction-receipt.json').read_text(encoding='utf-8'))
           head = subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip()
           motion = receipt['motion_boundary']
           position = receipt['position_uv_handedness']
           directions = receipt['direction_frames']
           negative = receipt['negative_controls']['child_weight_mutation']
           truth = receipt['truth_boundary']
-          body = f'''### Rigging transported tangent deformation evidence — exact head `{head}`
+          recovered = reconstruction['reconstruction']
+          mutation = reconstruction['negative_controls']['coherent_posed_shape_mutation']
+          rtruth = reconstruction['truth_boundary']
+          body = f'''### Rigging transported tangent deformation + post-skin reconstruction — exact head `{head}`
 
-          Scoped result: **`{receipt['state']}`**
+Scoped transport result: **`{receipt['state']}`**
 
-          - exact retained Technical Art GLB: `{receipt['technical_art']['glb_sha256']}`;
-          - authored-key boundary: `{motion['authored_key_count']}` keys across `{motion['time_start_seconds']}`→`{motion['time_end_seconds']}` s, transported quaternion angle range `{motion['minimum_angle_deg']}`→`{motion['maximum_angle_deg']}`° with neutral closure;
-          - position/UV/handedness gate: **{position['gate']}** — max position residual `{position['maximum_position_residual_m']}` m, max UV residual `{position['maximum_uv_residual']}`, tangent-W mismatches `{position['tangent_handedness_mismatch_count']}`;
-          - normal direction: max `{directions['maximum_normal_angle_deg']}`°, neutral max `{directions['neutral_maximum_normal_angle_deg']}`°, deformation excess `{directions['normal_deformation_excess_deg']}`°;
-          - raw tangent direction: max `{directions['maximum_raw_tangent_angle_deg']}`°, max raw |n·t| `{directions['maximum_raw_normal_tangent_dot_abs']}`;
-          - post-skin Gram–Schmidt witness: max tangent angle `{directions['maximum_corrected_tangent_angle_deg']}`°, neutral max `{directions['neutral_maximum_corrected_tangent_angle_deg']}`°, deformation excess `{directions['corrected_tangent_deformation_excess_deg']}`°, max corrected |n·t| `{directions['maximum_corrected_normal_tangent_dot_abs']}`, orthogonality gate **{directions['post_skin_gram_schmidt_orthogonality_gate']}**, direction-equivalence gate **{directions['equivalence_gate']}**;
-          - fail-closed blended child-weight mutation: render vertex `{negative['render_vertex']}`, peak key `{negative['peak_sample']}`, original residual `{negative['original_position_residual_m']}` m → mutated residual `{negative['mutated_position_residual_m']}` m (**{negative['status']}**).
+- exact retained Technical Art GLB: `{receipt['technical_art']['glb_sha256']}`;
+- authored-key boundary: `{motion['authored_key_count']}` keys across `{motion['time_start_seconds']}`→`{motion['time_end_seconds']}` s, transported quaternion angle range `{motion['minimum_angle_deg']}`→`{motion['maximum_angle_deg']}`° with neutral closure;
+- position/UV/handedness gate: **{position['gate']}** — max position residual `{position['maximum_position_residual_m']}` m, max UV residual `{position['maximum_uv_residual']}`, tangent-W mismatches `{position['tangent_handedness_mismatch_count']}`;
+- retained static-direction transport HOLD: normal deformation excess `{directions['normal_deformation_excess_deg']}`°, corrected tangent deformation excess `{directions['corrected_tangent_deformation_excess_deg']}`°;
+- existing fail-closed weight mutation: `{negative['original_position_residual_m']}` m → `{negative['mutated_position_residual_m']}` m (**{negative['status']}**).
 
-          Truth boundary remains explicit: source/rig/weights/Animation/Technical-Art GLB are unchanged; Animation accepted = `{truth['animation_accepted']}`; Runtime/controller accepted = `{truth['runtime_or_controller_accepted']}`; shaded visual quality accepted = `{truth['shaded_visual_quality_accepted']}`; CANON claimed = `{truth['canon_claimed']}`.
-          '''
-          body = '\n'.join(line.strip() if line.startswith('          ') else line for line in body.splitlines()) + '\n'
+Scoped follow-up result: **`{reconstruction['state']}`**
+
+- reconstruct source pose from the transported skinned POSITION field using the fixed Geometry render→source mapping, then re-run the unchanged Geometry/Rigging owner normal+tangent derivation;
+- all `{reconstruction['motion_boundary']['authored_key_count']}` exact keys checked;
+- max UV-split position disagreement `{recovered['maximum_uv_split_position_residual_m']}` m;
+- max owner position residual `{recovered['maximum_owner_position_residual_m']}` m;
+- max owner normal angle `{recovered['maximum_owner_normal_angle_deg']}`°;
+- max owner tangent angle `{recovered['maximum_owner_tangent_angle_deg']}`°;
+- max reconstructed |N·T| `{recovered['maximum_normal_tangent_dot_abs']}`; handedness mismatches `{recovered['tangent_handedness_mismatch_count']}`;
+- 1 mm coherent posed-shape mutation produces `{mutation['direction_signal_deg']}`° frame signal (**{mutation['status']}**).
+
+Truth boundary remains explicit: the original static-direction transport HOLD is preserved; source/rig/weights/UVs/Animation/Technical-Art GLB are unchanged. Reconstruction is measurement-only. Technical Art adopted = `{rtruth['technical_art_adopted_reconstruction']}`; Animation accepted = `{rtruth['animation_accepted']}`; Runtime/controller accepted = `{rtruth['runtime_or_controller_accepted']}`; shaded visual accepted = `{rtruth['shaded_visual_quality_accepted']}`; CANON = `{rtruth['canon_claimed']}`.
+'''
           Path('/tmp/rigging-comment.md').write_text(body, encoding='utf-8')
           PY
           gh pr comment "$PR_NUMBER" --repo "$REPOSITORY" --body-file /tmp/rigging-comment.md
@@ -159,5 +197,14 @@ jobs:
         with:
           name: animal-rigging-transported-tangent-deformation-${{ github.event.pull_request.head.sha || github.sha }}
           path: animal/evidence/rigging-transported-tangent-deformation-001
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Upload exact post-skin owner-frame reconstruction evidence
+        if: ${{ always() && matrix.python-version == '3.11' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: animal-rigging-transported-frame-reconstruction-${{ github.event.pull_request.head.sha || github.sha }}
+          path: animal/evidence/rigging-transported-frame-reconstruction-001
           if-no-files-found: error
           retention-days: 30
