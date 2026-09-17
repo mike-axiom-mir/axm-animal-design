@@ -10,6 +10,7 @@ const EXPECTED_INDICES := 240
 const POSITION_TOLERANCE := 0.000001
 const DIRECTION_VECTOR_TOLERANCE := 0.00025
 const DIRECTION_ANGLE_TOLERANCE_DEG := 0.015
+const DIRECTION_ANGLE_SELF_CHECK_DEG := 0.01
 const UV_TOLERANCE := 0.000001
 const WARMUP_ROUNDS := 5
 const MEASURED_ROUNDS := 31
@@ -41,10 +42,22 @@ func _as_vec2(value: Variant) -> Vector2:
 
 
 func _direction_angle_deg(left: Vector3, right: Vector3) -> float:
-	if left.length_squared() <= 0.0 or right.length_squared() <= 0.0:
+	var left_length := left.length()
+	var right_length := right.length()
+	if left_length <= 0.0 or right_length <= 0.0:
 		return INF
-	var dot_value: float = clamp(left.normalized().dot(right.normalized()), -1.0, 1.0)
-	return rad_to_deg(acos(dot_value))
+	var length_product := left_length * right_length
+	var sine_value: float = clamp(left.cross(right).length() / length_product, 0.0, 1.0)
+	var cosine_value: float = clamp(left.dot(right) / length_product, -1.0, 1.0)
+	return rad_to_deg(atan2(sine_value, cosine_value))
+
+
+func _verify_direction_angle_metric() -> void:
+	var known_angle_rad := deg_to_rad(DIRECTION_ANGLE_SELF_CHECK_DEG)
+	var near_parallel := Vector3(cos(known_angle_rad), sin(known_angle_rad), 0.0)
+	var measured_angle_deg := _direction_angle_deg(Vector3.RIGHT, near_parallel)
+	if abs(measured_angle_deg - DIRECTION_ANGLE_SELF_CHECK_DEG) > 0.0005:
+		_fatal("runtime direction angle evidence metric lost near-parallel precision")
 
 
 func _write_json(path: String, value: Dictionary) -> void:
@@ -153,30 +166,12 @@ func _validate_readback(mesh: ArrayMesh, packed: Dictionary, metrics: Dictionary
 			observed_tangents[vertex_index * 4 + 1],
 			observed_tangents[vertex_index * 4 + 2]
 		)
-		metrics["maximum_position_vector_delta"] = max(
-			float(metrics["maximum_position_vector_delta"]),
-			expected_vertices[vertex_index].distance_to(observed_vertices[vertex_index])
-		)
-		metrics["maximum_normal_vector_delta"] = max(
-			float(metrics["maximum_normal_vector_delta"]),
-			expected_normals[vertex_index].distance_to(observed_normals[vertex_index])
-		)
-		metrics["maximum_normal_angle_deg"] = max(
-			float(metrics["maximum_normal_angle_deg"]),
-			_direction_angle_deg(expected_normals[vertex_index], observed_normals[vertex_index])
-		)
-		metrics["maximum_tangent_vector_delta"] = max(
-			float(metrics["maximum_tangent_vector_delta"]),
-			expected_tangent.distance_to(observed_tangent)
-		)
-		metrics["maximum_tangent_angle_deg"] = max(
-			float(metrics["maximum_tangent_angle_deg"]),
-			_direction_angle_deg(expected_tangent, observed_tangent)
-		)
-		metrics["maximum_uv_delta"] = max(
-			float(metrics["maximum_uv_delta"]),
-			expected_uvs[vertex_index].distance_to(observed_uvs[vertex_index])
-		)
+		metrics["maximum_position_vector_delta"] = max(float(metrics["maximum_position_vector_delta"]), expected_vertices[vertex_index].distance_to(observed_vertices[vertex_index]))
+		metrics["maximum_normal_vector_delta"] = max(float(metrics["maximum_normal_vector_delta"]), expected_normals[vertex_index].distance_to(observed_normals[vertex_index]))
+		metrics["maximum_normal_angle_deg"] = max(float(metrics["maximum_normal_angle_deg"]), _direction_angle_deg(expected_normals[vertex_index], observed_normals[vertex_index]))
+		metrics["maximum_tangent_vector_delta"] = max(float(metrics["maximum_tangent_vector_delta"]), expected_tangent.distance_to(observed_tangent))
+		metrics["maximum_tangent_angle_deg"] = max(float(metrics["maximum_tangent_angle_deg"]), _direction_angle_deg(expected_tangent, observed_tangent))
+		metrics["maximum_uv_delta"] = max(float(metrics["maximum_uv_delta"]), expected_uvs[vertex_index].distance_to(observed_uvs[vertex_index]))
 		if expected_tangents[vertex_index * 4 + 3] != observed_tangents[vertex_index * 4 + 3]:
 			metrics["tangent_w_mismatch_count"] = int(metrics["tangent_w_mismatch_count"]) + 1
 	for index_offset in range(EXPECTED_INDICES):
@@ -245,6 +240,8 @@ func _initialize() -> void:
 	if payload_path.is_empty() or out_path.is_empty():
 		_fatal("usage: --payload <json> --out <json>")
 
+	_verify_direction_angle_metric()
+
 	var payload: Variant = JSON.parse_string(FileAccess.get_file_as_string(payload_path))
 	if typeof(payload) != TYPE_DICTIONARY:
 		_fatal("runtime probe payload must be a JSON object")
@@ -254,9 +251,6 @@ func _initialize() -> void:
 	if typeof(frames) != TYPE_ARRAY or frames.size() != EXPECTED_KEYS:
 		_fatal("runtime probe requires all 41 authored keys")
 
-	# Conversion from retained JSON into Godot Packed arrays is intentionally
-	# outside the timed region: a product receiver would not reparse JSON every
-	# frame, and this pass isolates ArrayMesh resource lifecycle only.
 	var packed_frames: Array = []
 	for frame_index in range(frames.size()):
 		var frame: Dictionary = frames[frame_index]
@@ -305,18 +299,11 @@ func _initialize() -> void:
 	var median_delta_percent := 0.0
 	if baseline_median_us > 0.0:
 		median_delta_percent = (candidate_median_us - baseline_median_us) / baseline_median_us * 100.0
-	var median_within_guard := (
-		baseline_median_us > 0.0
-		and candidate_median_us <= baseline_median_us * MAX_MEDIAN_REGRESSION_RATIO
-	)
+	var median_within_guard := baseline_median_us > 0.0 and candidate_median_us <= baseline_median_us * MAX_MEDIAN_REGRESSION_RATIO
 
 	var per_playback_baseline_resources := EXPECTED_KEYS
 	var per_playback_candidate_resources := 1
-	var resource_reduction_percent := (
-		float(per_playback_baseline_resources - per_playback_candidate_resources)
-		/ float(per_playback_baseline_resources)
-		* 100.0
-	)
+	var resource_reduction_percent := float(per_playback_baseline_resources - per_playback_candidate_resources) / float(per_playback_baseline_resources) * 100.0
 	var pass_gate := (
 		_metrics_pass(baseline_metrics)
 		and _metrics_pass(candidate_metrics)
@@ -356,6 +343,8 @@ func _initialize() -> void:
 			"surface_buffer_rebuild_eliminated": false,
 		},
 		"readback": {
+			"direction_angle_metric": "atan2(cross_length/length_product,dot/length_product)",
+			"direction_angle_metric_self_check_deg": DIRECTION_ANGLE_SELF_CHECK_DEG,
 			"baseline": baseline_metrics,
 			"candidate": candidate_metrics,
 			"visual_tradeoff": "NONE_OBSERVED_AT_RECEIVER_ARRAY_READBACK_ALL_41_KEYS__FRESH_SHADED_RENDER_NOT_RUN",
