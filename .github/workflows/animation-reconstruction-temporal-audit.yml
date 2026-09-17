@@ -1,0 +1,61 @@
+name: Animation reconstruction temporal audit
+
+on:
+  pull_request:
+    paths:
+      - "src/axm_animal_design/animation_reconstruction_temporal_audit.py"
+      - "tests/test_animation_reconstruction_temporal_audit.py"
+      - "tools/build_animation_reconstruction_temporal_audit.py"
+      - "docs/animation_reconstruction_temporal_audit.md"
+      - ".github/workflows/animation-reconstruction-temporal-audit.yml"
+      - "examples/quadruped_articulation_loop_001.json"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Run Animation reconstruction temporal audit tests
+        run: python -m unittest tests.test_animation_reconstruction_temporal_audit -v
+
+      - name: Download exact Rigging reconstruction artifact
+        if: matrix.python-version == '3.11'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh api /repos/${{ github.repository }}/actions/artifacts/10476642320/zip > /tmp/rigging-reconstruction.zip
+
+      - name: Build exact Animation reconstruction temporal evidence
+        if: matrix.python-version == '3.11'
+        env:
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          rm -rf evidence/animation-reconstruction-temporal-audit
+          PYTHONPATH=src python tools/build_animation_reconstruction_temporal_audit.py \
+            --rigging-artifact-zip /tmp/rigging-reconstruction.zip \
+            --clip examples/quadruped_articulation_loop_001.json \
+            --current-animation-head "$HEAD_SHA" \
+            --out evidence/animation-reconstruction-temporal-audit
+
+      - name: Upload exact Animation evidence
+        if: matrix.python-version == '3.11'
+        uses: actions/upload-artifact@v4
+        with:
+          name: animal-animation-reconstruction-temporal-audit
+          path: evidence/animation-reconstruction-temporal-audit
+          if-no-files-found: error
