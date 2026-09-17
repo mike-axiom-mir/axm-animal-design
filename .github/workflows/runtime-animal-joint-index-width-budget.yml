@@ -40,11 +40,15 @@ jobs:
           set -euo pipefail
           git rev-parse HEAD > exact-head.txt
           test "$(git rev-parse HEAD)" = "${{ github.event.pull_request.head.sha || github.sha }}"
-          test "$(git rev-parse HEAD^)" = "01458a9697406a649b0e1e3bf3997f7ea817a344"
+          git cat-file -e 01458a9697406a649b0e1e3bf3997f7ea817a344^{commit}
+          git merge-base --is-ancestor 01458a9697406a649b0e1e3bf3997f7ea817a344 HEAD
           git cat-file -e 4649d144841fbd1f3f43e9c7deb6f37b91fbd93d^{commit}
           git merge-base --is-ancestor 4649d144841fbd1f3f43e9c7deb6f37b91fbd93d 01458a9697406a649b0e1e3bf3997f7ea817a344
+          test "$(git rev-parse HEAD:src/axm_animal_design/uc_rigged_tangent_bridge.py)" = "90343f493389446f06d58202cb7465c98307458f"
           test "$(git rev-parse 01458a9697406a649b0e1e3bf3997f7ea817a344:src/axm_animal_design/uc_rigged_tangent_bridge.py)" = "90343f493389446f06d58202cb7465c98307458f"
           test "$(git rev-parse 4649d144841fbd1f3f43e9c7deb6f37b91fbd93d:src/axm_animal_design/uc_rigged_tangent_bridge.py)" = "90343f493389446f06d58202cb7465c98307458f"
+          unexpected="$(git diff --name-only 01458a9697406a649b0e1e3bf3997f7ea817a344..HEAD | grep -Ev '^(\.github/workflows/runtime-animal-joint-index-width-budget\.yml|evidence/godot_runtime_animal_joint_index_budget/project\.godot|src/axm_animal_design/runtime_joint_index_width_budget\.py|tests/test_runtime_joint_index_width_budget\.py|tools/build_runtime_animal_joint_index_budget\.py|tools/verify_runtime_animal_joint_index_budget\.py)$' || true)"
+          test -z "$unexpected" || { echo "unexpected Runtime-lane file drift: $unexpected" >&2; exit 1; }
 
       - name: Checkout pinned current Universal Creation receiver and Godot donor
         uses: actions/checkout@v4
