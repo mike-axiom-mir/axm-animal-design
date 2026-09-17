@@ -1,0 +1,159 @@
+name: Animation Godot quaternion interpolation evidence
+
+on:
+  push:
+    branches:
+      - studio/animation-quadruped-articulation-loop-001
+    paths:
+      - "tools/build_animation_godot_quaternion_interpolation_payload.py"
+      - "tools/godot_animation_quaternion_interpolation/**"
+      - ".github/workflows/animation-godot-quaternion-interpolation-evidence.yml"
+  pull_request:
+    paths:
+      - "tools/build_animation_godot_quaternion_interpolation_payload.py"
+      - "tools/godot_animation_quaternion_interpolation/**"
+      - ".github/workflows/animation-godot-quaternion-interpolation-evidence.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  godot-quaternion-interpolation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out exact Animation head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+
+      - name: Bind exact head
+        shell: bash
+        run: |
+          set -euo pipefail
+          EXACT_HEAD_SHA="$(git rev-parse HEAD)"
+          echo "EXACT_HEAD_SHA=${EXACT_HEAD_SHA}" >> "$GITHUB_ENV"
+          if [ -n "${{ github.event.pull_request.head.sha }}" ]; then
+            test "$EXACT_HEAD_SHA" = "${{ github.event.pull_request.head.sha }}"
+          else
+            test "$EXACT_HEAD_SHA" = "$GITHUB_SHA"
+          fi
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Preserve inherited Animal tests
+        run: |
+          set -euo pipefail
+          python -m compileall -q src tests tools
+          python -m unittest discover -s tests -v
+
+      - name: Download exact retained Runtime candidate
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/animation-godot-quat/runtime
+          curl -fL \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/actions/artifacts/10477292250/zip" \
+            -o /tmp/animation-godot-quat/runtime.zip
+          echo "76455589e0dde3327f72ebff6a117a2ce12ff57edaaf1d0e61304056d03063c3  /tmp/animation-godot-quat/runtime.zip" | sha256sum -c -
+          unzip -q /tmp/animation-godot-quat/runtime.zip -d /tmp/animation-godot-quat/runtime
+          echo "81c5422f8cf13ca65a253d3b05ebcf88fc0b20601dfb466b3c92f0d5e28dafcb  /tmp/animation-godot-quat/runtime/candidate-u16norm-weights.glb" | sha256sum -c -
+
+      - name: Build exact independent quaternion reference
+        run: |
+          set -euo pipefail
+          rm -rf tools/godot_animation_quaternion_interpolation/generated
+          mkdir -p tools/godot_animation_quaternion_interpolation/generated
+          python tools/build_animation_godot_quaternion_interpolation_payload.py \
+            --candidate-glb /tmp/animation-godot-quat/runtime/candidate-u16norm-weights.glb \
+            --current-animation-head "$EXACT_HEAD_SHA" \
+            --out tools/godot_animation_quaternion_interpolation/generated/payload.json
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          payload = json.loads(Path('tools/godot_animation_quaternion_interpolation/generated/payload.json').read_text())
+          assert payload['current_animation_head'] == os.environ['EXACT_HEAD_SHA'], payload
+          assert payload['source_identity']['motion_changed'] is False
+          assert payload['source_identity']['retimed'] is False
+          assert payload['source_identity']['authored_key_count'] == 41
+          assert payload['dense_reference']['sample_count'] == 321
+          assert payload['dense_reference']['samples_per_authored_interval'] == 8
+          assert len(payload['dense_reference']['samples']) == 321
+          PY
+
+      - name: Download pinned Godot 4.7.2
+        env:
+          GODOT_URL: https://github.com/godotengine/godot-builds/releases/download/4.7.2-stable/Godot_v4.7.2-stable_linux.x86_64.zip
+          GODOT_SHA256: cadd3204e728a35d3f13adb7fd0d7902636b79f6b95c40c265eb73b6c35329e4
+        run: |
+          set -euo pipefail
+          mkdir -p .godot-bin
+          curl --fail --location --retry 3 --retry-delay 2 "$GODOT_URL" --output .godot-bin/godot.zip
+          echo "$GODOT_SHA256  .godot-bin/godot.zip" | sha256sum --check --strict
+          unzip -q .godot-bin/godot.zip -d .godot-bin
+          chmod +x .godot-bin/Godot_v4.7.2-stable_linux.x86_64
+          .godot-bin/Godot_v4.7.2-stable_linux.x86_64 --version
+
+      - name: Install virtual display when needed
+        run: |
+          if ! command -v xvfb-run >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y xvfb
+          fi
+
+      - name: Exercise exact AnimationPlayer quaternion interpolation
+        run: |
+          set -euo pipefail
+          xvfb-run --auto-servernum --server-args="-screen 0 640x480x24" \
+            .godot-bin/Godot_v4.7.2-stable_linux.x86_64 \
+            --display-driver x11 \
+            --rendering-method gl_compatibility \
+            --path tools/godot_animation_quaternion_interpolation \
+            --script observe.gd
+
+      - name: Validate scoped target-host receipt
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          root = Path('tools/godot_animation_quaternion_interpolation/generated')
+          payload = json.loads((root / 'payload.json').read_text())
+          receipt = json.loads((root / 'godot_receipt.json').read_text())
+          assert receipt['state'] == 'PASS_GODOT_ANIMATIONPLAYER_GLTF_LINEAR_QUATERNION_INTERPOLATION_EQUIVALENCE', receipt
+          assert receipt['promotion_effect'] == 'NONE', receipt
+          assert payload['current_animation_head'] == os.environ['EXACT_HEAD_SHA'], payload
+          obs = receipt['dense_observation']
+          assert obs['sample_count'] == 321, obs
+          assert obs['diagnostic_rate_hz'] == 320, obs
+          assert obs['maximum_quaternion_residual_deg'] <= obs['residual_limit_deg'], obs
+          assert obs['wallclock_pacing_claimed'] is False, obs
+          assert obs['renderer_delivery_claimed'] is False, obs
+          neg = receipt['negative_control']
+          assert neg['failed_closed'] is True, neg
+          assert neg['signal_deg'] >= neg['minimum_required_signal_deg'], neg
+          assert neg['source_changed'] is False, neg
+          boundary = receipt['truth_boundary'].lower()
+          for word in ('wall-clock', 'controller', 'gameplay', 'target-device', 'art/qa'):
+              assert word in boundary, (word, boundary)
+          print(json.dumps(receipt, indent=2))
+          PY
+
+      - name: Upload exact quaternion interpolation evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: animal-animation-godot-quaternion-interpolation-${{ env.EXACT_HEAD_SHA }}
+          path: |
+            tools/godot_animation_quaternion_interpolation/generated/payload.json
+            tools/godot_animation_quaternion_interpolation/generated/godot_receipt.json
+          if-no-files-found: warn
+          retention-days: 30
