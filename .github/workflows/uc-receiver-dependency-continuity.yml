@@ -1,0 +1,135 @@
+name: UC rigged receiver dependency continuity evidence
+
+on:
+  pull_request:
+    paths:
+      - "src/axm_animal_design/uc_receiver_dependency_continuity.py"
+      - "tools/build_uc_receiver_dependency_continuity_evidence.py"
+      - "tests/test_uc_receiver_dependency_continuity.py"
+      - ".github/workflows/uc-receiver-dependency-continuity.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  exact-receiver-dependency-closure:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout exact Technical Art head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          path: animal-ta
+          fetch-depth: 0
+
+      - name: Bind exact Technical Art head
+        shell: bash
+        run: |
+          set -euo pipefail
+          TA_HEAD="$(git -C animal-ta rev-parse HEAD)"
+          echo "TA_HEAD=${TA_HEAD}" >> "$GITHUB_ENV"
+          if [ -n "${{ github.event.pull_request.head.sha }}" ]; then
+            test "$TA_HEAD" = "${{ github.event.pull_request.head.sha }}"
+          else
+            test "$TA_HEAD" = "$GITHUB_SHA"
+          fi
+          git -C animal-ta merge-base --is-ancestor 54efaf9f2bb77d0ba577c8a11510a578504b70de HEAD
+
+      - name: Checkout last exact tested UC receiver head
+        uses: actions/checkout@v4
+        with:
+          repository: mike-axiom-mir/axm-universal-creation
+          ref: aa53ee8aa803c19524b7edbef6250bf6ed9336c0
+          path: uc-tested
+          fetch-depth: 1
+
+      - name: Checkout current inspected UC main head
+        uses: actions/checkout@v4
+        with:
+          repository: mike-axiom-mir/axm-universal-creation
+          ref: 452b179cccff8acdde8930f7bde8662e52f86949
+          path: uc-current
+          fetch-depth: 0
+
+      - name: Bind exact UC receiver dependency identities
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C uc-tested rev-parse HEAD)" = "aa53ee8aa803c19524b7edbef6250bf6ed9336c0"
+          test "$(git -C uc-current rev-parse HEAD)" = "452b179cccff8acdde8930f7bde8662e52f86949"
+          git -C uc-current merge-base --is-ancestor aa53ee8aa803c19524b7edbef6250bf6ed9336c0 452b179cccff8acdde8930f7bde8662e52f86949
+          for root in uc-tested uc-current; do
+            test "$(git -C "$root" hash-object capabilities/platform-hands/shared/asset-hands/rigged-gltf-codec.js)" = "02b69b6c7368ba6e34f226ca545293d26d208922"
+            test "$(git -C "$root" hash-object capabilities/platform-hands/shared/asset-hands/gltf-codec.js)" = "31d3145bc337214fc77da0b8955acf91da3f2253"
+          done
+
+      - name: Download exact Animal rigged source transport
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/source-ta"
+          gh api repos/mike-axiom-mir/axm-animal-design/actions/artifacts/10474385703/zip > "$RUNNER_TEMP/source-ta.zip"
+          echo "7fc2a7f5d745da593e8762efa98e13661f84a057b1eb60921d576c366e71d7bb  $RUNNER_TEMP/source-ta.zip" | sha256sum -c -
+          unzip -q "$RUNNER_TEMP/source-ta.zip" -d "$RUNNER_TEMP/source-ta"
+          SOURCE_GLB="$(find "$RUNNER_TEMP/source-ta" -name 'animal_selected003_right_mirror_rigged_uv_tangent_41key.glb' -print -quit)"
+          test -n "$SOURCE_GLB"
+          test "$(sha256sum "$SOURCE_GLB" | awk '{print $1}')" = "ecb122e3274929c3d99bc8e29a472aaa2657bcb16b13331a4f1972bb6ec6b493"
+          echo "SOURCE_GLB=$SOURCE_GLB" >> "$GITHUB_ENV"
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Verify reusable receiver dependency contract
+        working-directory: animal-ta
+        run: |
+          python -m compileall -q src tests tools
+          PYTHONPATH=src python -m unittest tests.test_uc_receiver_dependency_continuity -v
+
+      - name: Prove tested receiver to current UC receiver continuity
+        working-directory: animal-ta
+        env:
+          PYTHONPATH: src
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf evidence/uc_receiver_dependency_continuity
+          python tools/build_uc_receiver_dependency_continuity_evidence.py \
+            --tested-uc-root "$GITHUB_WORKSPACE/uc-tested" \
+            --current-uc-root "$GITHUB_WORKSPACE/uc-current" \
+            --source-glb "$SOURCE_GLB" \
+            --technical-art-head "$TA_HEAD" \
+            --out evidence/uc_receiver_dependency_continuity
+          grep -q 'PASS_CURRENT_UC_RIGGED_RECEIVER_DEPENDENCY_CLOSURE_IDENTICAL_TO_TESTED_RECEIVER' \
+            evidence/uc_receiver_dependency_continuity/uc-rigged-receiver-dependency-continuity.json
+          grep -q '"status": "PASS_REJECTED"' \
+            evidence/uc_receiver_dependency_continuity/uc-rigged-receiver-dependency-continuity.json
+          grep -q '"godot_target_host_rerun_at_current_uc_head": false' \
+            evidence/uc_receiver_dependency_continuity/uc-rigged-receiver-dependency-continuity.json
+          test "$(cat evidence/uc_receiver_dependency_continuity/technical-art-head.txt)" = "$TA_HEAD"
+
+      - name: Retain narrow truth boundary
+        working-directory: animal-ta
+        shell: bash
+        run: |
+          cat > evidence/uc_receiver_dependency_continuity/README.txt <<'EOF'
+          Technical Art / UC Integration receiver-dependency continuity evidence only.
+          The proof recursively discovers the local CommonJS source closure loaded by UC's rigged-gltf-codec.js entry point, binds every file by Git blob identity, and runs the exact retained Animal rigged source GLB through both the last tested UC receiver head and the current inspected UC head.
+          This closes a provenance gap where pinning only the rigged wrapper could miss a change in its required ./gltf-codec dependency.
+          It does not modify Universal Creation, move Animal semantics into UC, rerun the real Godot target host at the current UC head, prove bilateral target-host equivalence, establish Runtime/product acceptance, accept device performance, claim CANON, or establish production readiness.
+          EOF
+          cp "$SOURCE_GLB" evidence/uc_receiver_dependency_continuity/animal_selected003_right_mirror_rigged_uv_tangent_41key.glb
+
+      - name: Upload exact receiver dependency continuity evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: animal-uc-receiver-dependency-continuity-${{ github.event.pull_request.head.sha || github.sha }}
+          path: animal-ta/evidence/uc_receiver_dependency_continuity
+          if-no-files-found: warn
+          retention-days: 30
