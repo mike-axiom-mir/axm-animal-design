@@ -6,6 +6,10 @@ on:
       - "src/axm_animal_design/uc_deformed_frame_gate.py"
       - "tools/build_uc_deformed_frame_gate_evidence.py"
       - "tests/test_uc_deformed_frame_gate.py"
+      - "src/axm_animal_design/uc_direction_frame_reconstruction_contract.py"
+      - "tools/build_uc_direction_frame_reconstruction_contract_evidence.py"
+      - "tests/test_uc_direction_frame_reconstruction_contract.py"
+      - "docs/technical_art_direction_frame_reconstruction_contract.md"
       - ".github/workflows/uc-deformed-frame-gate.yml"
   workflow_dispatch:
 
@@ -108,5 +112,127 @@ jobs:
         with:
           name: animal-current-uc-deformed-frame-gate-${{ github.event.pull_request.head.sha || github.sha }}
           path: animal-ta/evidence/uc_deformed_frame_gate
+          if-no-files-found: error
+          retention-days: 30
+
+  rigging-reconstruction-to-current-uc-adoption-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout exact Technical Art contract head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          path: animal-ta
+          fetch-depth: 0
+
+      - name: Bind exact Technical Art lineage
+        shell: bash
+        run: |
+          set -euo pipefail
+          TA_HEAD="$(git -C animal-ta rev-parse HEAD)"
+          echo "TA_HEAD=${TA_HEAD}" >> "$GITHUB_ENV"
+          if [ -n "${{ github.event.pull_request.head.sha }}" ]; then
+            test "${TA_HEAD}" = "${{ github.event.pull_request.head.sha }}"
+          else
+            test "${TA_HEAD}" = "${GITHUB_SHA}"
+          fi
+          git -C animal-ta merge-base --is-ancestor 01458a9697406a649b0e1e3bf3997f7ea817a344 HEAD
+          test "$(git -C animal-ta hash-object src/axm_animal_design/uc_rigged_tangent_bridge.py)" = "90343f493389446f06d58202cb7465c98307458f"
+
+      - name: Download exact Rigging owner reconstruction evidence
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/rigging-reconstruction"
+          gh api repos/mike-axiom-mir/axm-animal-design/actions/artifacts/10476642320/zip > "$RUNNER_TEMP/rigging-reconstruction.zip"
+          echo "2d11836cc7c1ada5146752d0b6205d0e4f476cd085ee8be4964e2f024f70fa58  $RUNNER_TEMP/rigging-reconstruction.zip" | sha256sum -c -
+          unzip -q "$RUNNER_TEMP/rigging-reconstruction.zip" -d "$RUNNER_TEMP/rigging-reconstruction"
+          RIGGING_RECEIPT="$(find "$RUNNER_TEMP/rigging-reconstruction" -name 'post-skin-owner-frame-reconstruction-receipt.json' -print -quit)"
+          test -n "$RIGGING_RECEIPT"
+          test "$(cat "$RUNNER_TEMP/rigging-reconstruction/exact-rigging-head.txt")" = "81ab44eab2e13bed95187610a476be2b2c4667a7"
+          grep -q 'PASS_TRANSPORTED_POST_SKIN_OWNER_FRAME_RECONSTRUCTION_41_KEYS' "$RIGGING_RECEIPT"
+          grep -q '"technical_art_adopted_reconstruction": false' "$RIGGING_RECEIPT"
+          echo "RIGGING_RECEIPT=$RIGGING_RECEIPT" >> "$GITHUB_ENV"
+
+      - name: Download exact source Technical Art transport artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/source-ta"
+          gh api repos/mike-axiom-mir/axm-animal-design/actions/artifacts/10474385703/zip > "$RUNNER_TEMP/source-ta.zip"
+          echo "7fc2a7f5d745da593e8762efa98e13661f84a057b1eb60921d576c366e71d7bb  $RUNNER_TEMP/source-ta.zip" | sha256sum -c -
+          unzip -q "$RUNNER_TEMP/source-ta.zip" -d "$RUNNER_TEMP/source-ta"
+          SOURCE_GLB="$(find "$RUNNER_TEMP/source-ta" -name 'animal_selected003_right_mirror_rigged_uv_tangent_41key.glb' -print -quit)"
+          test -n "$SOURCE_GLB"
+          test "$(sha256sum "$SOURCE_GLB" | awk '{print $1}')" = "ecb122e3274929c3d99bc8e29a472aaa2657bcb16b13331a4f1972bb6ec6b493"
+          echo "SOURCE_GLB=$SOURCE_GLB" >> "$GITHUB_ENV"
+
+      - name: Checkout exact current Universal Creation receiver
+        uses: actions/checkout@v4
+        with:
+          repository: mike-axiom-mir/axm-universal-creation
+          ref: c9d28d43e4b25532fcd31622196a08794e467ade
+          path: uc-current
+          fetch-depth: 1
+
+      - name: Bind current Universal Creation identity without modifying it
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C uc-current rev-parse HEAD)" = "c9d28d43e4b25532fcd31622196a08794e467ade"
+          UC_CODEC_BLOB="$(git -C uc-current hash-object capabilities/platform-hands/shared/asset-hands/rigged-gltf-codec.js)"
+          test -n "$UC_CODEC_BLOB"
+          echo "UC_CODEC_BLOB=$UC_CODEC_BLOB" >> "$GITHUB_ENV"
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Verify bounded Technical Art contract tests
+        working-directory: animal-ta
+        env:
+          PYTHONPATH: src
+        run: |
+          python -m compileall -q src tests tools
+          python -m unittest discover -s tests -p 'test_uc_direction_frame_reconstruction_contract.py' -v
+
+      - name: Build exact reconstruction adoption contract evidence
+        working-directory: animal-ta
+        env:
+          PYTHONPATH: src
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf evidence/uc_direction_frame_reconstruction_contract
+          python tools/build_uc_direction_frame_reconstruction_contract_evidence.py \
+            --rigging-receipt "$RIGGING_RECEIPT" \
+            --rigging-head 81ab44eab2e13bed95187610a476be2b2c4667a7 \
+            --rigging-artifact-id 10476642320 \
+            --rigging-artifact-sha256 2d11836cc7c1ada5146752d0b6205d0e4f476cd085ee8be4964e2f024f70fa58 \
+            --source-technical-art-head 4649d144841fbd1f3f43e9c7deb6f37b91fbd93d \
+            --source-glb "$SOURCE_GLB" \
+            --source-glb-sha256 ecb122e3274929c3d99bc8e29a472aaa2657bcb16b13331a4f1972bb6ec6b493 \
+            --current-technical-art-head "$TA_HEAD" \
+            --uc-head c9d28d43e4b25532fcd31622196a08794e467ade \
+            --uc-codec-blob "$UC_CODEC_BLOB" \
+            --out evidence/uc_direction_frame_reconstruction_contract
+          grep -q 'PASS_POST_SKIN_OWNER_FRAME_RECONSTRUCTION_CONTRACT_ADOPTED__HOLD_TARGET_RUNTIME_IMPLEMENTATION' evidence/uc_direction_frame_reconstruction_contract/uc_direction_frame_reconstruction_contract_evidence.json
+          grep -q '"raw_static_normal_tangent_direction_equivalence_established": false' evidence/uc_direction_frame_reconstruction_contract/uc_direction_frame_reconstruction_contract_evidence.json
+          grep -q '"animal_domain_policy_moved_into_uc": false' evidence/uc_direction_frame_reconstruction_contract/uc_direction_frame_reconstruction_contract_evidence.json
+          grep -q '"target_runtime_implemented": false' evidence/uc_direction_frame_reconstruction_contract/uc_direction_frame_reconstruction_contract_evidence.json
+          grep -q 'PASS_REJECTED' evidence/uc_direction_frame_reconstruction_contract/uc_direction_frame_reconstruction_contract_evidence.json
+          test "$(cat evidence/uc_direction_frame_reconstruction_contract/technical-art-head.txt)" = "$TA_HEAD"
+          test "$(cat evidence/uc_direction_frame_reconstruction_contract/uc-head.txt)" = "c9d28d43e4b25532fcd31622196a08794e467ade"
+
+      - name: Upload exact reconstruction adoption evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: animal-current-uc-direction-frame-reconstruction-contract-${{ github.event.pull_request.head.sha || github.sha }}
+          path: animal-ta/evidence/uc_direction_frame_reconstruction_contract
           if-no-files-found: error
           retention-days: 30
