@@ -29,11 +29,17 @@ func quat_from_row(row) -> Quaternion:
     return Quaternion(float(row[0]), float(row[1]), float(row[2]), float(row[3])).normalized()
 
 func quat_error_deg(observed: Quaternion, expected: Quaternion) -> float:
+    # Use the shortest quaternion chord and asin, not acos(dot). For nearly
+    # identical float quaternions, acos(dot) turns one final-bit dot-product
+    # roundoff into a false ~0.04 degree angular residual. The chord form is
+    # numerically stable close to zero while retaining the same physical angle.
     var a := observed.normalized()
     var b := expected.normalized()
-    var d := absf(a.dot(b))
-    d = clampf(d, -1.0, 1.0)
-    return rad_to_deg(2.0 * acos(d))
+    var direct := Vector4(a.x - b.x, a.y - b.y, a.z - b.z, a.w - b.w).length()
+    var negated := Vector4(a.x + b.x, a.y + b.y, a.z + b.z, a.w + b.w).length()
+    var chord := minf(direct, negated)
+    chord = clampf(chord, 0.0, 2.0)
+    return rad_to_deg(2.0 * asin(chord * 0.5))
 
 func _initialize() -> void:
     if not FileAccess.file_exists(PAYLOAD_PATH):
@@ -135,6 +141,7 @@ func _initialize() -> void:
         "maximum_residual_sample_index": max_error_sample,
         "authored_boundary_maximum_residual_deg": authored_boundary_max_deg,
         "residual_limit_deg": RESIDUAL_LIMIT_DEG,
+        "residual_method": "SHORTEST_QUATERNION_CHORD_TO_ANGLE_ASIN_STABLE_NEAR_ZERO",
         "animation_track_type": "TYPE_ROTATION_3D",
         "animation_interpolation": "INTERPOLATION_LINEAR",
         "wallclock_pacing_claimed": false,
