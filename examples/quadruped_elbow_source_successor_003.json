@@ -1,0 +1,36 @@
+{
+  "schema": "axm.animal-organic-form-successor/v0.1",
+  "id": "quadruped-front-elbow-L-form-successor-003",
+  "base_source": {
+    "name": "quadruped-neutral-001",
+    "digest": "9becd2dea714d662e23386aacabd0fa99abd11ff3c08aad7d242138e654f932b"
+  },
+  "receiver": {
+    "candidate_id": "front-left-connected-chain-001",
+    "candidate_digest": "6e620ce4b1d810b259011d0d22d38ba7c7eea0e2500177df2bf28e08fe1caf6c",
+    "path_landmarks": [
+      "shoulder_L",
+      "elbow_L",
+      "wrist_L",
+      "front_paw_L"
+    ],
+    "segments": 10
+  },
+  "form_change": {
+    "landmark": "elbow_L",
+    "path_index": 1,
+    "axis": [0.0, 1.0, 0.0],
+    "nominal_bend_plane_radius_m": 0.09,
+    "bend_plane_radius_m": 0.0885,
+    "joint_axis_width_scale": 1.03
+  },
+  "review_lineage": {
+    "selected_review_candidate_digest": "c68eb89eefed5ca98951ea74bb28e370ab5ce9f7c2cf88d6adcdc48583141be4",
+    "selected_review_geometry_digest": "dfc58bebbbd6e3a73b96fa98dc31bbd6deace79bb1c5ed82671a78d8a048246a"
+  },
+  "ownership": {
+    "source_owner": "organic-form",
+    "source_owned_successor": true,
+    "canonical": false
+  }
+}
