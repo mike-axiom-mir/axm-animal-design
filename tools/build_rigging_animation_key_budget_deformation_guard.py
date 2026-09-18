@@ -2,9 +2,9 @@
 """Rigging-owned guard for the Runtime Animal animation-key budget candidate.
 
 Consumes the exact 41-key normalized-u16 control and exact 19-key Runtime candidate,
-then replays both through the existing Animal owner rig at 321 dense samples. This
-proves a bounded command-envelope inclusion plus sampled deformation witnesses; it
-does not adopt Runtime representation, Animation timing/playback, or target-host state.
+then replays both through the existing Animal owner rig at 321 dense samples. The
+result proves bounded command-envelope inclusion and sampled owner deformation while
+keeping a separate HOLD when Runtime's quaternion metric is not the owner angle metric.
 """
 from __future__ import annotations
 
@@ -33,8 +33,9 @@ from axm_animal_design.bilateral_uv_tangent_basis import derive_uv_tangent_basis
 from axm_animal_design.connected_deformation import _sub, _vec3, _weights, digest
 from axm_animal_design.transported_frame_reconstruction_constraint import _frame_residual
 
-SCHEMA = "axm.animal-rigging-animation-key-budget-deformation-guard/v0.1"
-PASS_STATE = "PASS_ANIMAL_RUNTIME_KEY_BUDGET_COMMAND_ENVELOPE_AND_321_DEFORMATION_WITNESSES"
+SCHEMA = "axm.animal-rigging-animation-key-budget-deformation-guard/v0.2"
+PASS_STATE = "PASS_ANIMAL_RUNTIME_KEY_BUDGET_OWNER_ANGLE_AND_321_DEFORMATION_WITNESSES"
+HOLD_STATE = "HOLD_RUNTIME_KEY_BUDGET_OWNER_ANGLE_TOLERANCE__COMMAND_ENVELOPE_AND_321_DEFORMATION_WITNESSES_PASS"
 RUNTIME_HEAD = "13ba20d198d2b7c5e428167745d59927b3084004"
 RUNTIME_ARTIFACT_ID = 10525970648
 RUNTIME_ARTIFACT_SHA256 = "ad071f58796b606d707168af9619d988a497ba1a745dda8ac62b42e7f814b996"
@@ -137,12 +138,21 @@ def _rotation_at(times, quaternions, time_s: float):
     return _slerp(quaternions[index], quaternions[index + 1], alpha)
 
 
-def _quaternion_error_deg(a, b) -> float:
+def _runtime_quaternion_metric_deg(a, b) -> float:
+    """Reproduce Runtime PR #30's exact qerr_deg metric, without reinterpreting it."""
     qa = _unit(a)
     qb = _unit(b)
     d1 = math.sqrt(sum((qa[i] - qb[i]) ** 2 for i in range(4)))
     d2 = math.sqrt(sum((qa[i] + qb[i]) ** 2 for i in range(4)))
     return math.degrees(2.0 * math.asin(min(1.0, min(d1, d2) / 2.0)))
+
+
+def _physical_rotation_error_deg(a, b) -> float:
+    """Shortest physical rotation angle between two unit quaternions."""
+    qa = _unit(a)
+    qb = _unit(b)
+    dot = max(-1.0, min(1.0, abs(_dot(qa, qb))))
+    return math.degrees(2.0 * math.acos(dot))
 
 
 def _extract_rotation_curve(data: bytes, expected_sha: str, expected_keys: int):
@@ -290,10 +300,11 @@ def build_report(
     owner = _prepare_owner(spec, left_profile, bilateral_profile, plan)
     joint_axis = _vec3(owner["joint"]["axis"], "joint axis")
     max_radius = max(_distance(position, owner["pivot"]) for position in owner["positions"])
-    angular_position_bound_m = 2.0 * max_radius * math.sin(math.radians(RUNTIME_TOLERANCE_DEG) * 0.5)
 
-    max_qerr_deg = 0.0
-    worst_qerr_index = 0
+    max_runtime_metric_deg = 0.0
+    max_physical_rotation_error_deg = 0.0
+    max_command_angle_residual_deg = 0.0
+    worst_command_index = 0
     max_position_delta_m = 0.0
     max_normal_delta_deg = 0.0
     max_tangent_delta_deg = 0.0
@@ -315,10 +326,16 @@ def build_report(
         if not _within_review_envelope(candidate_angle):
             raise ValueError(f"candidate command exits Rigging review envelope at sample {dense_index}")
 
-        qerr = _quaternion_error_deg(control_rotation, candidate_rotation)
-        if qerr > max_qerr_deg:
-            max_qerr_deg = qerr
-            worst_qerr_index = dense_index
+        runtime_metric = _runtime_quaternion_metric_deg(control_rotation, candidate_rotation)
+        physical_error = _physical_rotation_error_deg(control_rotation, candidate_rotation)
+        command_error = abs(control_angle - candidate_angle)
+        max_runtime_metric_deg = max(max_runtime_metric_deg, runtime_metric)
+        max_physical_rotation_error_deg = max(max_physical_rotation_error_deg, physical_error)
+        if command_error > max_command_angle_residual_deg:
+            max_command_angle_residual_deg = command_error
+            worst_command_index = dense_index
+        if abs(physical_error - command_error) > 2e-7:
+            raise ValueError(f"same-axis physical/command angle mismatch at sample {dense_index}")
 
         control_pose = _pose_metrics(
             owner["positions"], owner["indices"], owner["areas"], owner["weights"],
@@ -349,7 +366,9 @@ def build_report(
             "time_s": time_s,
             "control_angle_deg": control_angle,
             "candidate_angle_deg": candidate_angle,
-            "quaternion_residual_deg": qerr,
+            "command_angle_residual_deg": command_error,
+            "runtime_quaternion_metric_deg": runtime_metric,
+            "physical_rotation_error_deg": physical_error,
             "maximum_owner_position_delta_m": position_delta,
             "maximum_owner_normal_delta_deg": float(frame_delta["maximum_normal_angle_deg"]),
             "maximum_owner_tangent_delta_deg": float(frame_delta["maximum_tangent_angle_deg"]),
@@ -358,43 +377,56 @@ def build_report(
             "candidate_pose_status": candidate_pose["status"],
         })
 
-    if max_qerr_deg > RUNTIME_TOLERANCE_DEG + 1e-9:
-        raise ValueError("Runtime candidate exceeds exact angular budget under Rigging replay")
-    if max_position_delta_m > angular_position_bound_m + 1e-9:
-        raise ValueError("owner-position delta exceeds angle-derived Rigging bound")
+    runtime_max_metric = float(build.get("max_quaternion_residual_deg", -1.0))
+    if abs(runtime_max_metric - max_runtime_metric_deg) > 1e-7:
+        raise ValueError("Rigging replay does not reproduce Runtime quaternion metric")
+    if max_runtime_metric_deg > RUNTIME_TOLERANCE_DEG + 1e-9:
+        raise ValueError("exact candidate no longer satisfies its own Runtime metric budget")
     if handedness_mismatches != 0:
         raise ValueError("key reduction changes owner tangent handedness")
 
-    runtime_max_qerr = float(build.get("max_quaternion_residual_deg", -1.0))
-    if abs(runtime_max_qerr - max_qerr_deg) > 1e-7:
-        raise ValueError("Rigging replay does not reproduce Runtime angular residual")
+    physical_position_bound_m = 2.0 * max_radius * math.sin(
+        math.radians(max_command_angle_residual_deg) * 0.5
+    )
+    nominal_owner_angle_position_bound_m = 2.0 * max_radius * math.sin(
+        math.radians(RUNTIME_TOLERANCE_DEG) * 0.5
+    )
+    if max_position_delta_m > physical_position_bound_m + 1e-9:
+        raise ValueError("owner-position delta exceeds exact command-angle-derived bound")
 
-    # Actual-curve fail-closed mutation: shift one retained candidate key by +1 degree
-    # about the same exact axis. This must violate the unchanged Runtime angular budget.
+    owner_angle_budget_pass = max_command_angle_residual_deg <= RUNTIME_TOLERANCE_DEG + 1e-9
+    state = PASS_STATE if owner_angle_budget_pass else HOLD_STATE
+
+    # Fail-closed mutation: shift one retained candidate key by +1 physical degree
+    # about the same exact axis. Both the Runtime metric and owner-angle checks are recorded.
     mutated_rotations = [list(rotation) for rotation in candidate_rotations]
     mutation_index = min(range(len(candidate_times)), key=lambda index: abs(candidate_times[index] - 0.5))
     mutation_angle, _ = _signed_angle_and_axis_residual(mutated_rotations[mutation_index], axis)
     mutated_rotations[mutation_index] = _quat_from_axis_angle(axis, mutation_angle + 1.0)
-    mutated_max_qerr = max(
-        _quaternion_error_deg(
-            _rotation_at(control_times, control_rotations, dense_index / DENSE_RATE_HZ),
-            _rotation_at(candidate_times, mutated_rotations, dense_index / DENSE_RATE_HZ),
+    mutated_max_runtime_metric = 0.0
+    mutated_max_owner_angle = 0.0
+    for dense_index in range(DENSE_SAMPLE_COUNT):
+        t = dense_index / DENSE_RATE_HZ
+        control_rotation = _rotation_at(control_times, control_rotations, t)
+        mutated_rotation = _rotation_at(candidate_times, mutated_rotations, t)
+        mutated_max_runtime_metric = max(
+            mutated_max_runtime_metric,
+            _runtime_quaternion_metric_deg(control_rotation, mutated_rotation),
         )
-        for dense_index in range(DENSE_SAMPLE_COUNT)
-    )
-    if mutated_max_qerr <= RUNTIME_TOLERANCE_DEG:
-        raise ValueError("fail-closed +1 degree candidate-key mutation unexpectedly accepted")
+        control_angle, _ = _signed_angle_and_axis_residual(control_rotation, axis)
+        mutated_angle, _ = _signed_angle_and_axis_residual(mutated_rotation, axis)
+        mutated_max_owner_angle = max(mutated_max_owner_angle, abs(control_angle - mutated_angle))
+    if mutated_max_owner_angle <= RUNTIME_TOLERANCE_DEG:
+        raise ValueError("fail-closed +1 degree candidate-key mutation unexpectedly accepted by owner-angle budget")
     if _within_review_envelope(RIGGING_REVIEW_MAX_DEG + 1.0):
         raise ValueError("fail-closed review-envelope widening unexpectedly accepted")
 
-    representative_indices = sorted(set(REPRESENTATIVE_INDICES + [worst_qerr_index]))
+    representative_indices = sorted(set(REPRESENTATIVE_INDICES + [worst_command_index]))
     representatives = [rows[index] for index in representative_indices]
-    continuous_command_min = min(retained_candidate_angles)
-    continuous_command_max = max(retained_candidate_angles)
 
     return {
         "schema": SCHEMA,
-        "state": PASS_STATE,
+        "state": state,
         "current_rigging_head": current_rigging_head,
         "predecessor_rigging_head": PREDECESSOR_RIGGING_HEAD,
         "runtime_dependency": {
@@ -405,7 +437,8 @@ def build_report(
             "candidate_glb_sha256": CANDIDATE_GLB_SHA256,
             "control_keys": 41,
             "candidate_keys": 19,
-            "runtime_angular_budget_deg": RUNTIME_TOLERANCE_DEG,
+            "runtime_declared_tolerance_deg": RUNTIME_TOLERANCE_DEG,
+            "runtime_metric_reproduced_exactly": True,
         },
         "rig_identity": {
             "rig_plan_digest": RIG_PLAN_DIGEST,
@@ -418,11 +451,24 @@ def build_report(
         "continuous_command_envelope": {
             "same_axis_slerp_proven": True,
             "maximum_axis_residual": max_axis_residual,
-            "retained_candidate_key_angle_min_deg": continuous_command_min,
-            "retained_candidate_key_angle_max_deg": continuous_command_max,
+            "retained_candidate_key_angle_min_deg": min(retained_candidate_angles),
+            "retained_candidate_key_angle_max_deg": max(retained_candidate_angles),
             "all_candidate_segments_shorter_than_180_deg": True,
             "entire_reduced_channel_inside_existing_rigging_review_envelope": True,
             "continuous_deformation_or_collision_safety_claimed": False,
+        },
+        "metric_semantics": {
+            "runtime_max_quaternion_metric_deg": max_runtime_metric_deg,
+            "maximum_physical_rotation_error_deg": max_physical_rotation_error_deg,
+            "maximum_owner_command_angle_residual_deg": max_command_angle_residual_deg,
+            "runtime_metric_is_owner_angle_metric": False,
+            "owner_angle_budget_deg_if_runtime_tolerance_is_interpreted_physically": RUNTIME_TOLERANCE_DEG,
+            "owner_angle_budget_pass": owner_angle_budget_pass,
+            "acceptance": "PASS" if owner_angle_budget_pass else "HOLD",
+            "reason": (
+                "Runtime PR #30's qerr_deg reproduces a quaternion-space half-angle metric. "
+                "Rigging therefore does not silently reinterpret its 0.075 deg threshold as a 0.075 deg owner-command limit."
+            ),
         },
         "dense_deformation_witnesses": {
             "sample_rate_hz": DENSE_RATE_HZ,
@@ -433,19 +479,20 @@ def build_report(
             "candidate_angle_max_deg": candidate_max_angle,
             "all_control_owner_poses_pass": True,
             "all_candidate_owner_poses_pass": True,
-            "maximum_quaternion_residual_deg": max_qerr_deg,
-            "worst_quaternion_residual_index": worst_qerr_index,
-            "worst_quaternion_residual_time_s": worst_qerr_index / DENSE_RATE_HZ,
+            "worst_owner_command_residual_index": worst_command_index,
+            "worst_owner_command_residual_time_s": worst_command_index / DENSE_RATE_HZ,
             "maximum_owner_position_delta_m": max_position_delta_m,
-            "angle_derived_owner_position_bound_m": angular_position_bound_m,
+            "exact_command_angle_derived_owner_position_bound_m": physical_position_bound_m,
+            "nominal_0_075deg_owner_position_bound_m": nominal_owner_angle_position_bound_m,
             "maximum_owner_normal_delta_deg": max_normal_delta_deg,
             "maximum_owner_tangent_delta_deg": max_tangent_delta_deg,
             "tangent_handedness_mismatches": handedness_mismatches,
         },
         "representative_poses": representatives,
         "negative_controls": {
-            "candidate_retained_key_plus_1deg_max_residual_deg": mutated_max_qerr,
-            "candidate_retained_key_plus_1deg_rejected_by_angular_budget": True,
+            "candidate_retained_key_plus_1deg_max_runtime_metric_deg": mutated_max_runtime_metric,
+            "candidate_retained_key_plus_1deg_max_owner_angle_deg": mutated_max_owner_angle,
+            "candidate_retained_key_plus_1deg_rejected_by_owner_angle_budget": True,
             "review_envelope_plus_1deg_rejected": True,
         },
         "authority_boundary": {
@@ -457,10 +504,10 @@ def build_report(
             "canon_or_production_ready": False,
         },
         "truth_boundary": (
-            "PASS proves same-axis continuous command-envelope inclusion and 321 sampled owner-deformation "
-            "witnesses for the exact 19-key Runtime candidate. It does not prove mathematical continuous "
-            "deformation/collision safety, Animation playback, target-host behavior, device performance, "
-            "visual acceptance, CANON, or production readiness."
+            "The exact 19-key channel stays continuously inside the existing Rigging review envelope and all 321 sampled owner poses pass. "
+            "The exact Runtime quaternion metric is also reproduced. Acceptance remains HOLD because that metric is not the physical/owner command angle: "
+            "the owner-angle residual exceeds 0.075 deg if Runtime's threshold is interpreted as a physical-degree budget. No continuous deformation/collision theorem, "
+            "Animation playback acceptance, target-host acceptance, device acceptance, visual acceptance, CANON, or production readiness is claimed."
         ),
     }
 
