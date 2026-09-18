@@ -67,7 +67,7 @@ jobs:
           test -f /tmp/runtime-key-budget/source/candidate/godot_probe.gd
           test -f /tmp/runtime-key-budget/source/candidate/project.godot
 
-      - name: Build bounded key-budget candidate
+      - name: Build physical-angle-bounded key-budget candidate
         run: |
           set -euo pipefail
           out=evidence/runtime_animal_animation_key_budget_001
@@ -80,12 +80,22 @@ jobs:
           from pathlib import Path
           p=Path('evidence/runtime_animal_animation_key_budget_001/report.json')
           r=json.loads(p.read_text())
-          assert r['state']=='PASS_RUNTIME_ANIMAL_ANIMATION_KEY_BUDGET_CANDIDATE_BUILT', r
-          assert r['control_keys']==41 and r['candidate_keys']==19, r
-          assert r['animation_accessor_bytes_saved']==440, r
-          assert r['control_glb_bytes']==10296 and r['candidate_glb_bytes']==9852, r
-          assert r['candidate_sha256']=='a8a32b58ad3bad44176a676b00f5cf1c20d1a2ec6da275b683d8f73a69088d6b', r
-          assert r['max_quaternion_residual_deg'] <= r['tolerance_deg'], r
+          assert r['schema']=='axm.runtime-animal-animation-key-budget/v0.2', r
+          assert r['state']=='PASS_RUNTIME_ANIMAL_ANIMATION_KEY_BUDGET_PHYSICAL_ANGLE_CANDIDATE_BUILT', r
+          assert r['acceptance_metric']=='SHORTEST_PHYSICAL_ROTATION_ANGLE_DEG', r
+          assert r['control_keys']==41 and r['candidate_keys']==31, r
+          assert r['key_reduction']==10, r
+          assert r['animation_accessor_bytes_saved']==200, r
+          assert r['control_glb_bytes']==10296 and r['candidate_glb_bytes']==10096, r
+          assert r['glb_bytes_saved']==200, r
+          assert r['candidate_sha256']=='5191eadf9626c2f8ffcb21cf2d9c30d8ad399ba0f8d8e1705995f9cc97b799e4', r
+          assert r['max_physical_rotation_residual_deg'] <= r['physical_rotation_tolerance_deg'], r
+          assert r['peak_authored_index_20_retained'] is True, r
+          legacy=r['legacy_semantic_negative']
+          assert legacy['candidate_keys']==19, legacy
+          assert legacy['rejected_by_current_physical_tolerance'] is True, legacy
+          assert legacy['max_physical_rotation_residual_deg'] > r['physical_rotation_tolerance_deg'], (legacy,r)
+          assert 0.109 < legacy['max_physical_rotation_residual_deg'] < 0.110, legacy
           assert r['motion_retimed'] is False and r['source_authored_keys_modified'] is False, r
           PY
 
@@ -200,15 +210,17 @@ jobs:
                    'candidate_sha256':hashlib.sha256(cb.read_bytes()).hexdigest()}
               pairs.append(row); total_changed+=changed; total_gt1+=gt1; max_channel=max(max_channel,mx)
           final={
-            'state':'PASS_RUNTIME_ANIMAL_ANIMATION_KEY_BUDGET__VISUAL_TRADEOFF_RECORDED__HOLD_ART_QA_TARGET_DEVICE',
+            'state':'PASS_RUNTIME_ANIMAL_ANIMATION_KEY_BUDGET_PHYSICAL_ANGLE__VISUAL_TRADEOFF_RECORDED__HOLD_RIGGING_ART_QA_TARGET_DEVICE',
             'exact_runtime_head':os.environ['EXACT_HEAD_SHA'],
             'build':build,
             'receiver':{'backend':b['backend'],'triangles':80,'material_bindings_unchanged':True,'max_pose_bounds_delta_m':max_bound_delta},
             'visual_tradeoff':{'pairs':pairs,'pair_count':len(pairs),'raw_changed_pixels_total':total_changed,
                                'pixels_gt_1_lsb_total':total_gt1,'max_rgb_channel_delta_lsb':max_channel,
                                'art_direction_review_required':True},
-            'negative_control':{'mutated_source_identity_failed_closed':True},
-            'truth_boundary':'Import-budget and exact proof-host receiving evidence only. Nonzero raster drift is recorded for Art/QA; no target-device CPU/GPU/FPS/VRAM/thermal, gameplay, CANON or production claim.'
+            'negative_controls':{
+              'mutated_source_identity_failed_closed':True,
+              'legacy_19_key_half_angle_candidate_rejected_by_physical_tolerance':build['legacy_semantic_negative']['rejected_by_current_physical_tolerance']},
+            'truth_boundary':'Physical-angle import-budget and exact proof-host receiving evidence only. Rigging must rebind the new 31-key candidate before owner-deformation adoption; nonzero raster drift remains Art/QA-owned; no target-device CPU/GPU/FPS/VRAM/thermal, gameplay, CANON or production claim.'
           }
           (root/'final-report.json').write_text(json.dumps(final,indent=2)+'\n')
           print(json.dumps(final,indent=2))
