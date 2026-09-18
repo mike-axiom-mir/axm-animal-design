@@ -1,0 +1,201 @@
+name: Rigging normalized-u16 weight deformation rebind
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  normalized-u16-weight-rebind:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python: ['3.11', '3.13']
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+
+      - name: Preserve prior Rigging lineage
+        run: |
+          git merge-base --is-ancestor bbc61b0c920670e4cea4a85e43e2f6157a3987d0 HEAD
+          git merge-base --is-ancestor 63c65d57fda0595217f86d971ff8c67f256188be HEAD
+
+      - name: Download exact Runtime and Technical Art evidence
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          rm -rf /tmp/runtime /tmp/ta /tmp/runtime.zip /tmp/ta.zip
+          mkdir -p /tmp/runtime /tmp/ta
+          gh api repos/${{ github.repository }}/actions/artifacts/10477292250/zip > /tmp/runtime.zip
+          gh api repos/${{ github.repository }}/actions/artifacts/10477320699/zip > /tmp/ta.zip
+          test "$(sha256sum /tmp/runtime.zip | awk '{print $1}')" = "76455589e0dde3327f72ebff6a117a2ce12ff57edaaf1d0e61304056d03063c3"
+          test "$(sha256sum /tmp/ta.zip | awk '{print $1}')" = "bc5fe4798ce0c43d04338114905ccf1ae8cd9a676800e824571b60aef9aff15b"
+          unzip -q /tmp/runtime.zip -d /tmp/runtime
+          unzip -q /tmp/ta.zip -d /tmp/ta
+          test "$(sha256sum /tmp/runtime/control-f32-weights.glb | awk '{print $1}')" = "8d9bfb80369bda09eaad786a35833cd5e04da5e608211f53648daaa1cde29566"
+          test "$(sha256sum /tmp/runtime/candidate-u16norm-weights.glb | awk '{print $1}')" = "81c5422f8cf13ca65a253d3b05ebcf88fc0b20601dfb466b3c92f0d5e28dafcb"
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+
+      - name: Complete Animal regression suite
+        env:
+          PYTHONPATH: src
+        run: |
+          python -m compileall -q src tests tools
+          python -m unittest discover -s tests -v
+
+      - name: Prove exact normalized-u16 deformation bound
+        if: matrix.python == '3.11'
+        env:
+          CURRENT_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          rm -rf evidence/rigging-normalized-u16-weight-rebind-001
+          mkdir -p evidence/rigging-normalized-u16-weight-rebind-001
+          python - <<'PY'
+          import hashlib, json, math, os, struct
+          from pathlib import Path
+
+          PASS = "PASS_RUNTIME_U16_WEIGHT_CANDIDATE_RIGGING_DEFORMATION_REBIND_41_KEYS__STATIC_DIRECTION_FRAME_HOLD_PRESERVED"
+          CONTROL_SHA = "8d9bfb80369bda09eaad786a35833cd5e04da5e608211f53648daaa1cde29566"
+          CANDIDATE_SHA = "81c5422f8cf13ca65a253d3b05ebcf88fc0b20601dfb466b3c92f0d5e28dafcb"
+          RUNTIME_HEAD = "e7874c4a8dca1db48bc66f3546c2134f7d724456"
+          TA_HEAD = "54c9c11505e798a56619ebc14e9ab41f522eef70"
+          RIG_HEAD = "4acd9286140dd008f2a4f01ff513912497313e4f"
+          RIG_DONOR = "04760112deb81a8d145226fe7ee02923107c9916"
+          RIG_PLAN = "b1f39ef8cd127edf9288b89ebd1f1fc14e6a3ceb8b0db58fa0ba9b12bc892aa8"
+          GEOMETRY_HEAD = "ca4bb8a2f144231f8755eacc980785d1807b79db"
+          ANIMATION_HEAD = "1a8c929ce4372c4b1b1f29e9ac4cadd0cc26ac48"
+          KEY_COUNT, VERTICES = 41, 84
+          COMPONENT = {5121:("B",1,255.0),5123:("H",2,65535.0),5125:("I",4,None),5126:("f",4,None)}
+          WIDTH = {"SCALAR":1,"VEC2":2,"VEC3":3,"VEC4":4,"MAT4":16}
+
+          def sha(b): return hashlib.sha256(b).hexdigest()
+          def parse(path, expected):
+              b=Path(path).read_bytes()
+              assert sha(b)==expected
+              magic,version,length=struct.unpack_from("<4sII",b,0)
+              assert magic==b"glTF" and version==2 and length==len(b)
+              off=12; doc=bin_chunk=None
+              while off+8<=len(b):
+                  n,t=struct.unpack_from("<I4s",b,off); off+=8
+                  payload=b[off:off+n]; off+=n
+                  if t==b"JSON": doc=json.loads(payload.rstrip(b" \t\r\n\0"))
+                  elif t in (b"BIN\0",b"BIN "): bin_chunk=payload
+              assert isinstance(doc,dict) and bin_chunk is not None
+              def acc(i):
+                  a=doc["accessors"][i]; v=doc["bufferViews"][a["bufferView"]]
+                  fmt,size,nmax=COMPONENT[a["componentType"]]; width=WIDTH[a["type"]]
+                  stride=v.get("byteStride",width*size); base=v.get("byteOffset",0)+a.get("byteOffset",0)
+                  out=[]
+                  for k in range(a["count"]):
+                      vals=list(struct.unpack_from("<"+fmt*width,bin_chunk,base+k*stride))
+                      if a.get("normalized",False): vals=[x/nmax for x in vals]
+                      out.append(vals[0] if width==1 else vals)
+                  return out
+              p=doc["meshes"][0]["primitives"][0]; attrs=p["attributes"]
+              d={k:acc(v) for k,v in attrs.items()}; d["INDICES"]=acc(p["indices"])
+              s=doc["animations"][0]["samplers"][0]
+              d["TIMES"]=acc(s["input"]); d["ROTATIONS"]=acc(s["output"]); d["doc"]=doc
+              d["weight_meta"]={k:doc["accessors"][attrs["WEIGHTS_0"]].get(k) for k in ("componentType","type","normalized","count")}
+              return d
+
+          report=json.load(open('/tmp/runtime/report.json'))
+          receipt=json.load(open('/tmp/ta/uc_rigged_uv_tangent_transport_receipt.json'))
+          assert report["runtime_head"]==RUNTIME_HEAD and report["technical_art_head"]==TA_HEAD
+          rep=report["representation"]
+          assert rep["candidate_glb_sha256"]==CANDIDATE_SHA and rep["candidate_component_type"]==5123 and rep["candidate_normalized"] is True
+          assert rep["control_component_type"]==5126 and rep["control_normalized"] is False
+          assert rep["non_weight_accessor_payload_hashes_identical"] is True
+          assert rep["max_abs_decoded_weight_error"] <= 1/65535 + 1e-12
+          assert receipt["technical_art_head"]==TA_HEAD
+          owners=receipt["owners"]
+          assert owners["geometry"]["head"]==GEOMETRY_HEAD
+          assert owners["rigging"]["head"]==RIG_HEAD and owners["rigging"]["rig_donor_head"]==RIG_DONOR
+          assert owners["rigging"]["rig_plan_sha256"]==RIG_PLAN and owners["rigging"]["weighting"]=="smoothstep-v0"
+          assert owners["animation"]["head"]==ANIMATION_HEAD and owners["animation"]["key_count"]==KEY_COUNT
+
+          c=parse('/tmp/runtime/control-f32-weights.glb',CONTROL_SHA)
+          q=parse('/tmp/runtime/candidate-u16norm-weights.glb',CANDIDATE_SHA)
+          assert c["weight_meta"]=={"componentType":5126,"type":"VEC4","normalized":None,"count":84}
+          assert q["weight_meta"]=={"componentType":5123,"type":"VEC4","normalized":True,"count":84}
+          for name in ("POSITION","NORMAL","TANGENT","TEXCOORD_0","JOINTS_0","INDICES","TIMES","ROTATIONS"):
+              assert c[name]==q[name], name
+          assert c["doc"]["nodes"]==q["doc"]["nodes"] and c["doc"]["skins"]==q["doc"]["skins"]
+          pivot=c["doc"]["nodes"][2]["translation"]
+
+          def cross(a,b): return [a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]]
+          def unit(a):
+              n=math.sqrt(sum(x*x for x in a)); return [x/n for x in a]
+          def rot(v,quat):
+              x,y,z,w=unit(quat); qv=[x,y,z]; uv=cross(qv,v); uuv=cross(qv,uv)
+              return [v[i]+2*(w*uv[i]+uuv[i]) for i in range(3)]
+          def skin(p,quat,w):
+              local=[p[i]-pivot[i] for i in range(3)]; r=rot(local,quat); child=[r[i]+pivot[i] for i in range(3)]
+              return [(1-w)*p[i]+w*child[i] for i in range(3)]
+          def dist(a,b): return math.sqrt(sum((a[i]-b[i])**2 for i in range(3)))
+          def angle(quat):
+              x,y,z,w=unit(quat); a=math.degrees(2*math.atan2(math.sqrt(x*x+y*y+z*z),w)); return 360-a if a>180 else a
+          def child_weights(d):
+              rows=[]
+              for js,ws in zip(d["JOINTS_0"],d["WEIGHTS_0"]):
+                  assert abs(sum(ws)-1)<=1e-6
+                  rows.append(sum(w for j,w in zip(js,ws) if j==1))
+              return rows
+
+          cw,qw=child_weights(c),child_weights(q)
+          max_w=max(abs(a-b) for ra,rb in zip(c["WEIGHTS_0"],q["WEIGHTS_0"]) for a,b in zip(ra,rb))
+          assert max_w <= 1/65535 + 1e-12
+          per=[]
+          for k,quat in enumerate(c["ROTATIONS"]):
+              delta=max(dist(skin(p,quat,cw[i]),skin(p,quat,qw[i])) for i,p in enumerate(c["POSITION"]))
+              per.append({"sample_index":k,"time_s":c["TIMES"][k],"angle_deg":angle(quat),"max_position_delta_m":delta})
+          max_pos=max(x["max_position_delta_m"] for x in per)
+          assert max_pos <= 2e-7
+          assert per[0]["max_position_delta_m"] <= 1e-12 and per[-1]["max_position_delta_m"] <= 1e-12
+          mirror=max(abs(per[i]["max_position_delta_m"]-per[40-i]["max_position_delta_m"]) for i in range(41))
+          reps=[per[i] for i in (0,10,20,30,40)]
+
+          peak=20; step=64/65535; signal=0.0; signal_vertex=None
+          for i,(p,w) in enumerate(zip(c["POSITION"],qw)):
+              if 0<w<1:
+                  s=dist(skin(p,c["ROTATIONS"][peak],w),skin(p,c["ROTATIONS"][peak],min(1,w+step)))
+                  if s>signal: signal,signal_vertex=s,i
+          assert signal >= 1e-5
+
+          out={
+            "schema":"axm.animal-rigging-normalized-u16-weight-rebind/v0.1",
+            "state":PASS,
+            "current_rigging_head":os.environ["CURRENT_HEAD"],
+            "identity":{"runtime_head":RUNTIME_HEAD,"technical_art_head":TA_HEAD,"geometry_head":GEOMETRY_HEAD,"source_rigging_head":RIG_HEAD,"rig_donor_head":RIG_DONOR,"rig_plan_sha256":RIG_PLAN,"weighting":"smoothstep-v0","animation_head":ANIMATION_HEAD,"control_glb_sha256":CONTROL_SHA,"candidate_glb_sha256":CANDIDATE_SHA},
+            "weight_quantization":{"max_decoded_slot_error":max_w,"bound":1/65535+1e-12},
+            "deformation":{"sample_count":41,"render_vertices":84,"posed_vertex_comparisons":3444,"max_control_candidate_position_delta_m":max_pos,"bound_m":2e-7,"max_temporal_mirror_delta_m":mirror,"representative_keys":reps},
+            "negative_control":{"mutation":"+64 u16 steps to one blended child weight at peak sample","vertex_index":signal_vertex,"position_signal_m":signal,"minimum_signal_m":1e-5,"status":"PASS_FAILS_CLOSED_ON_MATERIAL_WEIGHT_DRIFT"},
+            "preserved_hold":{"state":"HOLD_DEFORMED_STATIC_NORMAL_TANGENT_TRANSPORT_EQUIVALENCE","historical_normal_excess_deg":7.541933278181338,"historical_corrected_tangent_excess_deg":3.6840862372161047,"reclassified":False},
+            "truth_boundary":{"technical_art_producer_adoption_claimed":False,"animation_accepted":False,"runtime_or_controller_accepted":False,"deformed_direction_frame_equivalence_claimed":False,"continuous_motion_claimed":False,"visual_acceptance_claimed":False}
+          }
+          outdir=Path('evidence/rigging-normalized-u16-weight-rebind-001')
+          (outdir/'receipt.json').write_text(json.dumps(out,indent=2,sort_keys=True)+'\n')
+          (outdir/'exact-head.txt').write_text(os.environ['CURRENT_HEAD']+'\n')
+          (outdir/'summary.txt').write_text(f"{PASS}\nmax_position_delta_m={max_pos:.18g}\nmax_weight_error={max_w:.18g}\nnegative_control_signal_m={signal:.18g}\n")
+          print(PASS, max_pos, max_w, signal)
+          PY
+          grep -q 'PASS_RUNTIME_U16_WEIGHT_CANDIDATE_RIGGING_DEFORMATION_REBIND_41_KEYS__STATIC_DIRECTION_FRAME_HOLD_PRESERVED' evidence/rigging-normalized-u16-weight-rebind-001/receipt.json
+          grep -q '"animation_accepted": false' evidence/rigging-normalized-u16-weight-rebind-001/receipt.json
+          grep -q '"runtime_or_controller_accepted": false' evidence/rigging-normalized-u16-weight-rebind-001/receipt.json
+          grep -q '"technical_art_producer_adoption_claimed": false' evidence/rigging-normalized-u16-weight-rebind-001/receipt.json
+
+      - name: Upload exact Rigging evidence
+        if: ${{ always() && matrix.python == '3.11' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: animal-rigging-normalized-u16-weight-rebind-${{ github.event.pull_request.head.sha || github.sha }}
+          path: evidence/rigging-normalized-u16-weight-rebind-001
+          if-no-files-found: error
+          retention-days: 30

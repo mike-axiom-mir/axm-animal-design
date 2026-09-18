@@ -1,0 +1,165 @@
+name: Rigging transported frame reconstruction evidence
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+  pull-requests: write
+
+jobs:
+  rigging-transported-frame-reconstruction:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ['3.11', '3.13']
+    steps:
+      - name: Checkout exact Rigging head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          path: animal
+          fetch-depth: 0
+
+      - name: Prove exact Rigging ancestry and preserved owner modules
+        working-directory: animal
+        run: |
+          git merge-base --is-ancestor 63c65d57fda0595217f86d971ff8c67f256188be HEAD
+          git merge-base --is-ancestor fdfeb0e32d8b51107e9bd648210a1eaf8aaf7f3e HEAD
+          test "$(git hash-object src/axm_animal_design/bilateral_deformed_tangent_frames.py)" = "fbade964b3305d70775d196232ad2cd4671d0eac"
+          test "$(git hash-object src/axm_animal_design/bilateral_source_successor_rigging_rebind.py)" = "f0cdcd7bf2452e73070efc872f53274a5ae3bcba"
+          test "$(git hash-object src/axm_animal_design/transported_tangent_deformation_audit.py)" = "42f31fc5cb95426e89d22b5ed6c2b0983a22326d"
+
+      - name: Checkout exact Technical Art transport donor
+        uses: actions/checkout@v4
+        with:
+          repository: mike-axiom-mir/axm-animal-design
+          ref: 4649d144841fbd1f3f43e9c7deb6f37b91fbd93d
+          path: technical-art
+          fetch-depth: 1
+
+      - name: Verify exact Technical Art transport module
+        run: |
+          test "$(git -C technical-art rev-parse HEAD)" = "4649d144841fbd1f3f43e9c7deb6f37b91fbd93d"
+          test "$(git -C technical-art hash-object src/axm_animal_design/uc_rigged_tangent_bridge.py)" = "90343f493389446f06d58202cb7465c98307458f"
+
+      - name: Checkout exact Rigging plan and weighting-profile donor
+        uses: actions/checkout@v4
+        with:
+          repository: mike-axiom-mir/axm-animal-design
+          ref: 04760112deb81a8d145226fe7ee02923107c9916
+          path: rig-donor
+
+      - name: Verify exact Rigging donor checkout
+        run: test "$(git -C rig-donor rev-parse HEAD)" = "04760112deb81a8d145226fe7ee02923107c9916"
+
+      - name: Download exact retained Technical Art artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          rm -rf ta-evidence /tmp/axm-ta.zip
+          mkdir -p ta-evidence
+          gh api repos/${{ github.repository }}/actions/artifacts/10474385703/zip > /tmp/axm-ta.zip
+          test "$(sha256sum /tmp/axm-ta.zip | awk '{print $1}')" = "7fc2a7f5d745da593e8762efa98e13661f84a057b1eb60921d576c366e71d7bb"
+          unzip -q /tmp/axm-ta.zip -d ta-evidence
+          TA_GLB="$(find "$GITHUB_WORKSPACE/ta-evidence" -name 'animal_selected003_right_mirror_rigged_uv_tangent_41key.glb' -print -quit)"
+          TA_RECEIPT="$(find "$GITHUB_WORKSPACE/ta-evidence" -name 'uc_rigged_uv_tangent_transport_receipt.json' -print -quit)"
+          test -n "$TA_GLB"
+          test -n "$TA_RECEIPT"
+          test "$(sha256sum "$TA_GLB" | awk '{print $1}')" = "ecb122e3274929c3d99bc8e29a472aaa2657bcb16b13331a4f1972bb6ec6b493"
+          grep -q '4649d144841fbd1f3f43e9c7deb6f37b91fbd93d' "$TA_RECEIPT"
+          echo "AXM_TA_GLB=$TA_GLB" >> "$GITHUB_ENV"
+          echo "AXM_TA_RECEIPT=$TA_RECEIPT" >> "$GITHUB_ENV"
+          echo "AXM_RIG_PLAN=$GITHUB_WORKSPACE/rig-donor/examples/quadruped_rig_probe_001.json" >> "$GITHUB_ENV"
+          echo "AXM_WEIGHTING_PROFILE=$GITHUB_WORKSPACE/rig-donor/examples/quadruped_weighting_refinement_001.json" >> "$GITHUB_ENV"
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Compile
+        working-directory: animal
+        run: python -m compileall -q src tests tools
+
+      - name: Run full inherited Animal suite plus reconstruction constraint
+        working-directory: animal
+        env:
+          PYTHONPATH: src
+        run: python -m unittest discover -s tests -v
+
+      - name: Build exact post-skin owner-frame reconstruction evidence
+        if: matrix.python-version == '3.11'
+        working-directory: animal
+        env:
+          PYTHONPATH: src
+        run: |
+          rm -rf evidence/rigging-transported-frame-reconstruction-001
+          python tools/build_transported_frame_reconstruction_constraint.py \
+            --source examples/quadruped_neutral_001.json \
+            --left-profile examples/quadruped_elbow_source_successor_003.json \
+            --bilateral-profile examples/quadruped_elbow_bilateral_successor_003.json \
+            --rig-plan "$AXM_RIG_PLAN" \
+            --weighting-profile "$AXM_WEIGHTING_PROFILE" \
+            --technical-art-receipt "$AXM_TA_RECEIPT" \
+            --technical-art-glb "$AXM_TA_GLB" \
+            --technical-art-head 4649d144841fbd1f3f43e9c7deb6f37b91fbd93d \
+            --technical-art-module-blob 90343f493389446f06d58202cb7465c98307458f \
+            --technical-art-artifact-id 10474385703 \
+            --technical-art-artifact-sha256 7fc2a7f5d745da593e8762efa98e13661f84a057b1eb60921d576c366e71d7bb \
+            --current-rigging-head "$(git rev-parse HEAD)" \
+            --out evidence/rigging-transported-frame-reconstruction-001
+          grep -q '"post_skin_owner_frame_reconstruction_established": true' evidence/rigging-transported-frame-reconstruction-001/post-skin-owner-frame-reconstruction-receipt.json
+          grep -q '"technical_art_adopted_reconstruction": false' evidence/rigging-transported-frame-reconstruction-001/post-skin-owner-frame-reconstruction-receipt.json
+          grep -q '"animation_accepted": false' evidence/rigging-transported-frame-reconstruction-001/post-skin-owner-frame-reconstruction-receipt.json
+          grep -q '"runtime_or_controller_accepted": false' evidence/rigging-transported-frame-reconstruction-001/post-skin-owner-frame-reconstruction-receipt.json
+
+      - name: Publish exact reconstruction evidence summary to PR
+        if: matrix.python-version == '3.11' && github.event_name == 'pull_request'
+        working-directory: animal
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          import subprocess
+          from pathlib import Path
+
+          receipt = json.loads(Path('evidence/rigging-transported-frame-reconstruction-001/post-skin-owner-frame-reconstruction-receipt.json').read_text(encoding='utf-8'))
+          head = subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip()
+          premise = receipt['premise']
+          motion = receipt['motion_boundary']
+          reconstruction = receipt['reconstruction']
+          mutation = receipt['negative_controls']['coherent_posed_shape_mutation']
+          truth = receipt['truth_boundary']
+          body = f'''### Rigging post-skin owner-frame reconstruction — exact head `{head}`
+
+Scoped result: **`{receipt['state']}`**
+
+- preserved premise: static transported direction frame remains **{premise['static_direction_transport_gate']}** with normal excess `{premise['static_normal_deformation_excess_deg']}`° and corrected tangent excess `{premise['static_corrected_tangent_deformation_excess_deg']}`°;
+- reconstructed from transported skinned POSITION + fixed Geometry source/render mapping/UVs across all `{motion['authored_key_count']}` exact keys;
+- max UV-split position disagreement `{reconstruction['maximum_uv_split_position_residual_m']}` m;
+- max owner position residual `{reconstruction['maximum_owner_position_residual_m']}` m;
+- max owner normal angle `{reconstruction['maximum_owner_normal_angle_deg']}`°;
+- max owner tangent angle `{reconstruction['maximum_owner_tangent_angle_deg']}`°;
+- max reconstructed |N·T| `{reconstruction['maximum_normal_tangent_dot_abs']}`; handedness mismatches `{reconstruction['tangent_handedness_mismatch_count']}`;
+- 1 mm coherent elbow-ring mutation produces `{mutation['direction_signal_deg']}`° direction-frame signal (**{mutation['status']}**).
+
+This is a Rigging structural reconstruction witness only. Technical Art adopted = `{truth['technical_art_adopted_reconstruction']}`; Animation accepted = `{truth['animation_accepted']}`; Runtime/controller accepted = `{truth['runtime_or_controller_accepted']}`; shaded visual accepted = `{truth['shaded_visual_quality_accepted']}`; CANON = `{truth['canon_claimed']}`.
+'''
+          Path('/tmp/rigging-reconstruction-comment.md').write_text(body, encoding='utf-8')
+          PY
+          gh pr comment "$PR_NUMBER" --repo "$REPOSITORY" --body-file /tmp/rigging-reconstruction-comment.md
+
+      - name: Upload exact reconstruction evidence
+        if: ${{ always() && matrix.python-version == '3.11' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: animal-rigging-transported-frame-reconstruction-${{ github.event.pull_request.head.sha || github.sha }}
+          path: animal/evidence/rigging-transported-frame-reconstruction-001
+          if-no-files-found: error
+          retention-days: 30

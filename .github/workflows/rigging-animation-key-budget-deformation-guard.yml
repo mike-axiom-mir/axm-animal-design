@@ -1,0 +1,147 @@
+name: Rigging Animal animation key-budget deformation guard
+
+on:
+  push:
+    branches:
+      - studio/rigging-transported-tangent-deformation-equivalence-001
+    paths:
+      - "tools/build_rigging_animation_key_budget_deformation_guard.py"
+      - "tools/run_rigging_animation_key_budget_deformation_guard.py"
+      - "docs/rigging_animation_key_budget_deformation_guard.md"
+      - ".github/workflows/rigging-animation-key-budget-deformation-guard.yml"
+  pull_request:
+    paths:
+      - "tools/build_rigging_animation_key_budget_deformation_guard.py"
+      - "tools/run_rigging_animation_key_budget_deformation_guard.py"
+      - "docs/rigging_animation_key_budget_deformation_guard.md"
+      - ".github/workflows/rigging-animation-key-budget-deformation-guard.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  rigging-key-budget-guard:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.13"]
+    steps:
+      - name: Checkout exact Rigging head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          path: animal
+          fetch-depth: 0
+
+      - name: Bind exact Rigging lineage
+        working-directory: animal
+        run: |
+          set -euo pipefail
+          git merge-base --is-ancestor d0c27db357b015a1ff270de294e39c1a44e3931d HEAD
+          echo "EXACT_RIGGING_HEAD=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+
+      - name: Checkout exact Runtime key-budget donor
+        uses: actions/checkout@v4
+        with:
+          repository: mike-axiom-mir/axm-animal-design
+          ref: 13ba20d198d2b7c5e428167745d59927b3084004
+          path: runtime-donor
+          fetch-depth: 1
+
+      - name: Verify exact Runtime donor tool
+        run: |
+          set -euo pipefail
+          test "$(git -C runtime-donor rev-parse HEAD)" = "13ba20d198d2b7c5e428167745d59927b3084004"
+          test "$(git -C runtime-donor hash-object tools/build_runtime_animal_animation_key_budget.py)" = "c827dfea80878e12b8296441c90ed7a2a000b54a"
+
+      - name: Checkout exact historical Rigging plan donor
+        uses: actions/checkout@v4
+        with:
+          repository: mike-axiom-mir/axm-animal-design
+          ref: 04760112deb81a8d145226fe7ee02923107c9916
+          path: rig-donor
+          fetch-depth: 1
+
+      - name: Download exact Runtime key-budget evidence
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/animal-key-budget-rigging
+          mkdir -p /tmp/animal-key-budget-rigging/runtime
+          gh api repos/${{ github.repository }}/actions/artifacts/10525970648/zip > /tmp/animal-key-budget-rigging/runtime.zip
+          echo "ad071f58796b606d707168af9619d988a497ba1a745dda8ac62b42e7f814b996  /tmp/animal-key-budget-rigging/runtime.zip" | sha256sum -c -
+          unzip -q /tmp/animal-key-budget-rigging/runtime.zip -d /tmp/animal-key-budget-rigging/runtime
+
+          CONTROL_GLB="$(find /tmp/animal-key-budget-rigging/runtime -type f -name control.glb -print -quit)"
+          CANDIDATE_GLB="$(find /tmp/animal-key-budget-rigging/runtime -type f -name candidate.glb -print -quit)"
+          RUNTIME_REPORT="$(find /tmp/animal-key-budget-rigging/runtime -type f -name final-report.json -print -quit)"
+          test -n "$CONTROL_GLB" && test -n "$CANDIDATE_GLB" && test -n "$RUNTIME_REPORT"
+          echo "81c5422f8cf13ca65a253d3b05ebcf88fc0b20601dfb466b3c92f0d5e28dafcb  $CONTROL_GLB" | sha256sum -c -
+          echo "a8a32b58ad3bad44176a676b00f5cf1c20d1a2ec6da275b683d8f73a69088d6b  $CANDIDATE_GLB" | sha256sum -c -
+          grep -q 'PASS_RUNTIME_ANIMAL_ANIMATION_KEY_BUDGET__VISUAL_TRADEOFF_RECORDED__HOLD_ART_QA_TARGET_DEVICE' "$RUNTIME_REPORT"
+          echo "CONTROL_GLB=$CONTROL_GLB" >> "$GITHUB_ENV"
+          echo "CANDIDATE_GLB=$CANDIDATE_GLB" >> "$GITHUB_ENV"
+          echo "RUNTIME_REPORT=$RUNTIME_REPORT" >> "$GITHUB_ENV"
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Compile and run complete inherited Animal suite
+        working-directory: animal
+        env:
+          PYTHONPATH: src
+        run: |
+          set -euo pipefail
+          python -m compileall -q src tests tools
+          python -m unittest discover -s tests -v
+
+      - name: Build exact Rigging key-budget evidence
+        if: matrix.python-version == '3.11'
+        working-directory: animal
+        env:
+          PYTHONPATH: src
+        run: |
+          set -euo pipefail
+          OUT=evidence/rigging-animation-key-budget-deformation-001
+          rm -rf "$OUT"
+          python tools/run_rigging_animation_key_budget_deformation_guard.py \
+            --source examples/quadruped_neutral_001.json \
+            --left-profile examples/quadruped_elbow_source_successor_003.json \
+            --bilateral-profile examples/quadruped_elbow_bilateral_successor_003.json \
+            --rig-plan "$GITHUB_WORKSPACE/rig-donor/examples/quadruped_rig_probe_001.json" \
+            --weighting-profile "$GITHUB_WORKSPACE/rig-donor/examples/quadruped_weighting_refinement_001.json" \
+            --control-glb "$CONTROL_GLB" \
+            --candidate-glb "$CANDIDATE_GLB" \
+            --runtime-report "$RUNTIME_REPORT" \
+            --current-rigging-head "$EXACT_RIGGING_HEAD" \
+            --out "$OUT"
+
+          grep -q 'HOLD_RUNTIME_KEY_BUDGET_OWNER_ANGLE_TOLERANCE__COMMAND_ENVELOPE_AND_321_DEFORMATION_WITNESSES_PASS' "$OUT/receipt.json"
+          grep -q '"entire_reduced_channel_inside_existing_rigging_review_envelope": true' "$OUT/receipt.json"
+          grep -q '"all_candidate_owner_poses_pass": true' "$OUT/receipt.json"
+          grep -q '"runtime_metric_is_owner_angle_metric": false' "$OUT/receipt.json"
+          grep -q '"owner_angle_budget_pass": false' "$OUT/receipt.json"
+          grep -q '"runtime_key_budget_adopted_by_rigging": false' "$OUT/receipt.json"
+          grep -q '"animation_timing_interpolation_playback_accepted_by_rigging": false' "$OUT/receipt.json"
+          grep -q '"technical_art_target_host_accepted_by_rigging": false' "$OUT/receipt.json"
+          grep -q '"runtime_controller_device_accepted_by_rigging": false' "$OUT/receipt.json"
+
+          cp "$RUNTIME_REPORT" "$OUT/exact-runtime-final-report.json"
+          cp "$GITHUB_WORKSPACE/rig-donor/examples/quadruped_rig_probe_001.json" "$OUT/exact-rig-plan.json"
+          cp "$GITHUB_WORKSPACE/rig-donor/examples/quadruped_weighting_refinement_001.json" "$OUT/exact-weighting-profile.json"
+          cp docs/rigging_animation_key_budget_deformation_guard.md "$OUT/"
+          cp tools/run_rigging_animation_key_budget_deformation_guard.py "$OUT/"
+
+      - name: Upload exact Rigging evidence
+        if: ${{ always() && matrix.python-version == '3.11' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: animal-rigging-animation-key-budget-${{ env.EXACT_RIGGING_HEAD }}
+          path: animal/evidence/rigging-animation-key-budget-deformation-001
+          if-no-files-found: error
+          retention-days: 30
