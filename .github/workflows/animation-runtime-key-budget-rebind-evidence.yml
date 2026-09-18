@@ -76,23 +76,12 @@ jobs:
           echo "36b870c7a3fd4c609fd4a1af2d03e444e8004422541a5809607650a45547f485  $root/rigging.zip" | sha256sum -c -
           unzip -q "$root/rigging.zip" -d "$root/rigging"
 
-          find_exact() {
-            local dir="$1" expected="$2" found=""
-            while IFS= read -r -d '' f; do
-              if [ "$(sha256sum "$f" | awk '{print $1}')" = "$expected" ]; then
-                if [ -n "$found" ]; then
-                  echo "duplicate exact file identity for $expected" >&2
-                  return 2
-                fi
-                found="$f"
-              fi
-            done < <(find "$dir" -type f -print0)
-            test -n "$found"
-            printf '%s\n' "$found"
-          }
-
-          CONTROL_GLB="$(find_exact "$root/runtime" 81c5422f8cf13ca65a253d3b05ebcf88fc0b20601dfb466b3c92f0d5e28dafcb)"
-          CANDIDATE_GLB="$(find_exact "$root/runtime" a8a32b58ad3bad44176a676b00f5cf1c20d1a2ec6da275b683d8f73a69088d6b)"
+          CONTROL_GLB="$root/runtime/control.glb"
+          CANDIDATE_GLB="$root/runtime/candidate.glb"
+          test -f "$CONTROL_GLB"
+          test -f "$CANDIDATE_GLB"
+          echo "81c5422f8cf13ca65a253d3b05ebcf88fc0b20601dfb466b3c92f0d5e28dafcb  $CONTROL_GLB" | sha256sum -c -
+          echo "a8a32b58ad3bad44176a676b00f5cf1c20d1a2ec6da275b683d8f73a69088d6b  $CANDIDATE_GLB" | sha256sum -c -
           echo "CONTROL_GLB=$CONTROL_GLB" >> "$GITHUB_ENV"
           echo "CANDIDATE_GLB=$CANDIDATE_GLB" >> "$GITHUB_ENV"
 
