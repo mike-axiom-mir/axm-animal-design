@@ -119,9 +119,11 @@ jobs:
             --current-rigging-head "$EXACT_RIGGING_HEAD" \
             --out "$OUT"
 
-          grep -q 'PASS_ANIMAL_RUNTIME_KEY_BUDGET_COMMAND_ENVELOPE_AND_321_DEFORMATION_WITNESSES' "$OUT/receipt.json"
+          grep -q 'HOLD_RUNTIME_KEY_BUDGET_OWNER_ANGLE_TOLERANCE__COMMAND_ENVELOPE_AND_321_DEFORMATION_WITNESSES_PASS' "$OUT/receipt.json"
           grep -q '"entire_reduced_channel_inside_existing_rigging_review_envelope": true' "$OUT/receipt.json"
           grep -q '"all_candidate_owner_poses_pass": true' "$OUT/receipt.json"
+          grep -q '"runtime_metric_is_owner_angle_metric": false' "$OUT/receipt.json"
+          grep -q '"owner_angle_budget_pass": false' "$OUT/receipt.json"
           grep -q '"runtime_key_budget_adopted_by_rigging": false' "$OUT/receipt.json"
           grep -q '"animation_timing_interpolation_playback_accepted_by_rigging": false' "$OUT/receipt.json"
           grep -q '"technical_art_target_host_accepted_by_rigging": false' "$OUT/receipt.json"
