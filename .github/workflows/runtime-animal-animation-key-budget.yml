@@ -1,0 +1,237 @@
+name: Runtime Animal animation key budget evidence
+
+on:
+  push:
+    branches:
+      - studio/runtime-animal-animation-key-budget-001
+    paths:
+      - "tools/build_runtime_animal_animation_key_budget.py"
+      - ".github/workflows/runtime-animal-animation-key-budget.yml"
+  pull_request:
+    paths:
+      - "tools/build_runtime_animal_animation_key_budget.py"
+      - ".github/workflows/runtime-animal-animation-key-budget.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  animal-animation-key-budget:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out exact Runtime head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+
+      - name: Bind exact head
+        shell: bash
+        run: |
+          set -euo pipefail
+          EXACT_HEAD_SHA="$(git rev-parse HEAD)"
+          echo "EXACT_HEAD_SHA=${EXACT_HEAD_SHA}" >> "$GITHUB_ENV"
+          if [ -n "${{ github.event.pull_request.head.sha }}" ]; then
+            test "$EXACT_HEAD_SHA" = "${{ github.event.pull_request.head.sha }}"
+          else
+            test "$EXACT_HEAD_SHA" = "$GITHUB_SHA"
+          fi
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Preserve inherited Animal tests
+        run: |
+          set -euo pipefail
+          python -m compileall -q src tests tools
+          python -m unittest discover -s tests -v
+
+      - name: Download exact retained Runtime control artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/runtime-key-budget/source
+          curl -fL \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/actions/artifacts/10477292250/zip" \
+            -o /tmp/runtime-key-budget/source.zip
+          echo "76455589e0dde3327f72ebff6a117a2ce12ff57edaaf1d0e61304056d03063c3  /tmp/runtime-key-budget/source.zip" | sha256sum -c -
+          unzip -q /tmp/runtime-key-budget/source.zip -d /tmp/runtime-key-budget/source
+          echo "81c5422f8cf13ca65a253d3b05ebcf88fc0b20601dfb466b3c92f0d5e28dafcb  /tmp/runtime-key-budget/source/candidate-u16norm-weights.glb" | sha256sum -c -
+          test -f /tmp/runtime-key-budget/source/candidate/godot_probe.gd
+          test -f /tmp/runtime-key-budget/source/candidate/project.godot
+
+      - name: Build physical-angle-bounded key-budget candidate
+        run: |
+          set -euo pipefail
+          out=evidence/runtime_animal_animation_key_budget_001
+          rm -rf "$out"
+          python tools/build_runtime_animal_animation_key_budget.py \
+            --control-glb /tmp/runtime-key-budget/source/candidate-u16norm-weights.glb \
+            --out-dir "$out"
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          p=Path('evidence/runtime_animal_animation_key_budget_001/report.json')
+          r=json.loads(p.read_text())
+          assert r['schema']=='axm.runtime-animal-animation-key-budget/v0.2', r
+          assert r['state']=='PASS_RUNTIME_ANIMAL_ANIMATION_KEY_BUDGET_PHYSICAL_ANGLE_CANDIDATE_BUILT', r
+          assert r['acceptance_metric']=='SHORTEST_PHYSICAL_ROTATION_ANGLE_DEG', r
+          assert r['control_keys']==41 and r['candidate_keys']==31, r
+          assert r['key_reduction']==10, r
+          assert r['animation_accessor_bytes_saved']==200, r
+          assert r['control_glb_bytes']==10296 and r['candidate_glb_bytes']==10096, r
+          assert r['glb_bytes_saved']==200, r
+          assert r['candidate_sha256']=='5191eadf9626c2f8ffcb21cf2d9c30d8ad399ba0f8d8e1705995f9cc97b799e4', r
+          assert r['max_physical_rotation_residual_deg'] <= r['physical_rotation_tolerance_deg'], r
+          assert r['peak_authored_index_20_retained'] is True, r
+          legacy=r['legacy_semantic_negative']
+          assert legacy['candidate_keys']==19, legacy
+          assert legacy['rejected_by_current_physical_tolerance'] is True, legacy
+          assert legacy['max_physical_rotation_residual_deg'] > r['physical_rotation_tolerance_deg'], (legacy,r)
+          assert 0.109 < legacy['max_physical_rotation_residual_deg'] < 0.110, legacy
+          assert r['motion_retimed'] is False and r['source_authored_keys_modified'] is False, r
+          PY
+
+      - name: Exercise fail-closed source identity control
+        run: |
+          set -euo pipefail
+          cp /tmp/runtime-key-budget/source/candidate-u16norm-weights.glb /tmp/runtime-key-budget/mutated.glb
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('/tmp/runtime-key-budget/mutated.glb')
+          b=bytearray(p.read_bytes()); b[-1] ^= 1; p.write_bytes(b)
+          PY
+          if python tools/build_runtime_animal_animation_key_budget.py \
+            --control-glb /tmp/runtime-key-budget/mutated.glb \
+            --out-dir /tmp/runtime-key-budget/negative; then
+            echo "Fail-closed source identity control unexpectedly passed" >&2
+            exit 1
+          fi
+
+      - name: Prepare exact historical Godot receiver A/B
+        run: |
+          set -euo pipefail
+          out=evidence/runtime_animal_animation_key_budget_001
+          for role in control candidate; do
+            mkdir -p "$out/$role"
+            cp /tmp/runtime-key-budget/source/candidate/godot_probe.gd "$out/$role/godot_probe.gd"
+            cp /tmp/runtime-key-budget/source/candidate/project.godot "$out/$role/project.godot"
+            cp "$out/request.json" "$out/$role/request.json"
+            cp "$out/$role.glb" "$out/$role/asset.glb"
+          done
+          echo "$EXACT_HEAD_SHA" > "$out/exact-head.txt"
+
+      - name: Download pinned Godot 4.7.2
+        env:
+          GODOT_URL: https://github.com/godotengine/godot-builds/releases/download/4.7.2-stable/Godot_v4.7.2-stable_linux.x86_64.zip
+          GODOT_SHA256: cadd3204e728a35d3f13adb7fd0d7902636b79f6b95c40c265eb73b6c35329e4
+        run: |
+          set -euo pipefail
+          mkdir -p .godot-bin
+          curl --fail --location --retry 3 --retry-delay 2 "$GODOT_URL" --output .godot-bin/godot.zip
+          echo "$GODOT_SHA256  .godot-bin/godot.zip" | sha256sum --check --strict
+          unzip -q .godot-bin/godot.zip -d .godot-bin
+          chmod +x .godot-bin/Godot_v4.7.2-stable_linux.x86_64
+          .godot-bin/Godot_v4.7.2-stable_linux.x86_64 --version
+
+      - name: Install virtual display and image verifier
+        run: |
+          set -euo pipefail
+          if ! command -v xvfb-run >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y xvfb
+          fi
+          python -m pip install --disable-pip-version-check pillow
+
+      - name: Run control and candidate through exact historical receiver
+        run: |
+          set -euo pipefail
+          GODOT="$PWD/.godot-bin/Godot_v4.7.2-stable_linux.x86_64"
+          out="$PWD/evidence/runtime_animal_animation_key_budget_001"
+          for role in control candidate; do
+            xvfb-run --auto-servernum --server-args="-screen 0 960x720x24" \
+              "$GODOT" \
+              --display-driver x11 \
+              --rendering-method gl_compatibility \
+              --path "$out/$role" \
+              --script godot_probe.gd
+          done
+
+      - name: Compare receiver and visual evidence
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json, hashlib, os
+          from pathlib import Path
+          from PIL import Image
+          root=Path('evidence/runtime_animal_animation_key_budget_001')
+          build=json.loads((root/'report.json').read_text())
+          a=json.loads((root/'control/worker-result.json').read_text())
+          b=json.loads((root/'candidate/worker-result.json').read_text())
+          if 'error' in a or 'error' in b: raise SystemExit((a,b))
+          assert a['source_sha256']==build['control_sha256'], (a,build)
+          assert b['source_sha256']==build['candidate_sha256'], (b,build)
+          assert a['backend']['version']==b['backend']['version'], (a['backend'],b['backend'])
+          assert len(a['poses'])==2 and len(b['poses'])==2, (a,b)
+          max_bound_delta=0.0
+          for pa,pb in zip(a['poses'],b['poses']):
+            assert pa['triangles']==pb['triangles']==80, (pa,pb)
+            for side in ('min','max'):
+              for x,y in zip(pa['bounds_m'][side],pb['bounds_m'][side]):
+                max_bound_delta=max(max_bound_delta,abs(float(x)-float(y)))
+          assert a.get('material_bindings')==b.get('material_bindings'), (a.get('material_bindings'),b.get('material_bindings'))
+          pairs=[]
+          total_changed=0
+          total_gt1=0
+          max_channel=0
+          for i in range(3):
+            for suffix in ('','-coverage'):
+              name=f'view-{i:02d}{suffix}.png'
+              ca=root/'control'/name; cb=root/'candidate'/name
+              ia=Image.open(ca).convert('RGB'); ib=Image.open(cb).convert('RGB')
+              if ia.size != ib.size: raise SystemExit((name,ia.size,ib.size))
+              ba=ia.tobytes(); bb=ib.tobytes()
+              changed=0; gt1=0; mx=0
+              for off in range(0,len(ba),3):
+                ds=[abs(ba[off+j]-bb[off+j]) for j in range(3)]
+                d=max(ds)
+                if d>0: changed+=1
+                if d>1: gt1+=1
+                if d>mx: mx=d
+              row={'name':name,'raw_changed_pixels':changed,'pixels_gt_1_lsb':gt1,'max_rgb_channel_delta_lsb':mx,
+                   'control_sha256':hashlib.sha256(ca.read_bytes()).hexdigest(),
+                   'candidate_sha256':hashlib.sha256(cb.read_bytes()).hexdigest()}
+              pairs.append(row); total_changed+=changed; total_gt1+=gt1; max_channel=max(max_channel,mx)
+          final={
+            'state':'PASS_RUNTIME_ANIMAL_ANIMATION_KEY_BUDGET_PHYSICAL_ANGLE__VISUAL_TRADEOFF_RECORDED__HOLD_RIGGING_ART_QA_TARGET_DEVICE',
+            'exact_runtime_head':os.environ['EXACT_HEAD_SHA'],
+            'build':build,
+            'receiver':{'backend':b['backend'],'triangles':80,'material_bindings_unchanged':True,'max_pose_bounds_delta_m':max_bound_delta},
+            'visual_tradeoff':{'pairs':pairs,'pair_count':len(pairs),'raw_changed_pixels_total':total_changed,
+                               'pixels_gt_1_lsb_total':total_gt1,'max_rgb_channel_delta_lsb':max_channel,
+                               'art_direction_review_required':True},
+            'negative_controls':{
+              'mutated_source_identity_failed_closed':True,
+              'legacy_19_key_half_angle_candidate_rejected_by_physical_tolerance':build['legacy_semantic_negative']['rejected_by_current_physical_tolerance']},
+            'truth_boundary':'Physical-angle import-budget and exact proof-host receiving evidence only. Rigging must rebind the new 31-key candidate before owner-deformation adoption; nonzero raster drift remains Art/QA-owned; no target-device CPU/GPU/FPS/VRAM/thermal, gameplay, CANON or production claim.'
+          }
+          (root/'final-report.json').write_text(json.dumps(final,indent=2)+'\n')
+          print(json.dumps(final,indent=2))
+          PY
+
+      - name: Upload exact Runtime evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: animal-runtime-animation-key-budget-${{ env.EXACT_HEAD_SHA }}
+          path: |
+            evidence/runtime_animal_animation_key_budget_001
+          if-no-files-found: warn
+          retention-days: 30
