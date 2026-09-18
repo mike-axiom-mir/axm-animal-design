@@ -6,11 +6,13 @@ on:
       - studio/rigging-transported-tangent-deformation-equivalence-001
     paths:
       - "tools/build_rigging_animation_key_budget_deformation_guard.py"
+      - "tools/run_rigging_animation_key_budget_deformation_guard.py"
       - "docs/rigging_animation_key_budget_deformation_guard.md"
       - ".github/workflows/rigging-animation-key-budget-deformation-guard.yml"
   pull_request:
     paths:
       - "tools/build_rigging_animation_key_budget_deformation_guard.py"
+      - "tools/run_rigging_animation_key_budget_deformation_guard.py"
       - "docs/rigging_animation_key_budget_deformation_guard.md"
       - ".github/workflows/rigging-animation-key-budget-deformation-guard.yml"
   workflow_dispatch:
@@ -107,7 +109,7 @@ jobs:
           set -euo pipefail
           OUT=evidence/rigging-animation-key-budget-deformation-001
           rm -rf "$OUT"
-          python tools/build_rigging_animation_key_budget_deformation_guard.py \
+          python tools/run_rigging_animation_key_budget_deformation_guard.py \
             --source examples/quadruped_neutral_001.json \
             --left-profile examples/quadruped_elbow_source_successor_003.json \
             --bilateral-profile examples/quadruped_elbow_bilateral_successor_003.json \
@@ -133,6 +135,7 @@ jobs:
           cp "$GITHUB_WORKSPACE/rig-donor/examples/quadruped_rig_probe_001.json" "$OUT/exact-rig-plan.json"
           cp "$GITHUB_WORKSPACE/rig-donor/examples/quadruped_weighting_refinement_001.json" "$OUT/exact-weighting-profile.json"
           cp docs/rigging_animation_key_budget_deformation_guard.md "$OUT/"
+          cp tools/run_rigging_animation_key_budget_deformation_guard.py "$OUT/"
 
       - name: Upload exact Rigging evidence
         if: ${{ always() && matrix.python-version == '3.11' }}
