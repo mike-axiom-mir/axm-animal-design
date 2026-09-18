@@ -1,0 +1,83 @@
+name: Geometry bilateral source-successor topology rebind evidence
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  geometry-bilateral-source-successor-topology-rebind:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ['3.11', '3.13']
+    steps:
+      - name: Checkout exact Geometry head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          path: animal
+          fetch-depth: 0
+      - name: Prove exact bilateral Organic ancestry
+        working-directory: animal
+        run: git merge-base --is-ancestor 4df3024b4c459675422565501a46f622acf229a9 HEAD
+      - name: Checkout exact historical left Geometry evidence donor
+        uses: actions/checkout@v4
+        with:
+          repository: mike-axiom-mir/axm-animal-design
+          ref: eb5ce99798b646b6ab9705c0c914b898173f7cc1
+          path: left-geometry-donor
+      - name: Checkout exact UC topology observer donor
+        uses: actions/checkout@v4
+        with:
+          repository: mike-axiom-mir/axm-universal-creation
+          ref: b434a349cf159b392148b4dc9d68146573531a60
+          path: uc
+      - name: Checkout exact Rigging donor required by inherited Animal tests
+        uses: actions/checkout@v4
+        with:
+          repository: mike-axiom-mir/axm-animal-design
+          ref: 04760112deb81a8d145226fe7ee02923107c9916
+          path: rig-donor
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Verify exact historical left Geometry donor checkout
+        run: test "$(git -C left-geometry-donor rev-parse HEAD)" = "eb5ce99798b646b6ab9705c0c914b898173f7cc1"
+      - name: Compile
+        working-directory: animal
+        run: python -m compileall -q src tests tools
+      - name: Run full inherited Animal test suite
+        working-directory: animal
+        env:
+          AXM_RIG_PLAN: ../rig-donor/examples/quadruped_rig_probe_001.json
+        run: python -m unittest discover -s tests -v
+      - name: Build exact bilateral Geometry topology evidence
+        if: matrix.python-version == '3.11'
+        working-directory: animal
+        env:
+          PYTHONPATH: src:../uc/src
+        run: |
+          mkdir -p evidence/geometry-bilateral-source-successor-topology-rebind-001
+          python tools/build_bilateral_source_successor_topology_rebind_evidence.py \
+            --source examples/quadruped_neutral_001.json \
+            --left-profile examples/quadruped_elbow_source_successor_003.json \
+            --bilateral-profile examples/quadruped_elbow_bilateral_successor_003.json \
+            --out evidence/geometry-bilateral-source-successor-topology-rebind-001
+
+          test -s evidence/geometry-bilateral-source-successor-topology-rebind-001/left-source-successor-topology-candidate.json
+          test -s evidence/geometry-bilateral-source-successor-topology-rebind-001/right-source-successor-topology-candidate.json
+          test -s evidence/geometry-bilateral-source-successor-topology-rebind-001/bilateral-source-successor-topology-rebind-receipt.json
+          grep -q 'PASS_BILATERAL_SOURCE_SUCCESSOR_EXACT_TOPOLOGY_REBIND' \
+            evidence/geometry-bilateral-source-successor-topology-rebind-001/bilateral-source-successor-topology-rebind-receipt.json
+          git rev-parse HEAD > evidence/geometry-bilateral-source-successor-topology-rebind-001/exact-head.txt
+          printf '%s\n' '4df3024b4c459675422565501a46f622acf229a9' > evidence/geometry-bilateral-source-successor-topology-rebind-001/organic-bilateral-head.txt
+          printf '%s\n' 'eb5ce99798b646b6ab9705c0c914b898173f7cc1' > evidence/geometry-bilateral-source-successor-topology-rebind-001/historical-left-geometry-head.txt
+          printf '%s\n' 'b434a349cf159b392148b4dc9d68146573531a60' > evidence/geometry-bilateral-source-successor-topology-rebind-001/uc-donor-head.txt
+      - name: Upload exact bilateral Geometry evidence
+        if: ${{ always() && matrix.python-version == '3.11' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: animal-geometry-bilateral-source-successor-topology-rebind-001-evidence
+          path: animal/evidence/geometry-bilateral-source-successor-topology-rebind-001
+          if-no-files-found: error
+          retention-days: 30
