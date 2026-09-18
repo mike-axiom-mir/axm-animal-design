@@ -1,0 +1,147 @@
+name: Animation connected forelimb motion evidence
+
+on:
+  push:
+    branches:
+      - studio/animation-quadruped-articulation-loop-001
+    paths:
+      - "tools/build_connected_animation_rebind_evidence.py"
+      - ".github/workflows/animation-connected-forelimb-motion-evidence.yml"
+      - "examples/quadruped_neutral_001.json"
+      - "examples/quadruped_rig_probe_001.json"
+      - "examples/quadruped_articulation_loop_001.json"
+  pull_request:
+    paths:
+      - "tools/build_connected_animation_rebind_evidence.py"
+      - ".github/workflows/animation-connected-forelimb-motion-evidence.yml"
+      - "examples/quadruped_neutral_001.json"
+      - "examples/quadruped_rig_probe_001.json"
+      - "examples/quadruped_articulation_loop_001.json"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  connected-motion:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ['3.11', '3.13']
+    steps:
+      - name: Check out exact Animation lane head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+          path: animal
+
+      - name: Bind receiving proof to actual checked-out head
+        working-directory: animal
+        shell: bash
+        run: |
+          set -euo pipefail
+          EXACT_HEAD_SHA="$(git rev-parse HEAD)"
+          echo "EXACT_HEAD_SHA=${EXACT_HEAD_SHA}" >> "$GITHUB_ENV"
+          if [ -n "${{ github.event.pull_request.head.sha }}" ]; then
+            test "${EXACT_HEAD_SHA}" = "${{ github.event.pull_request.head.sha }}"
+          else
+            test "${EXACT_HEAD_SHA}" = "${GITHUB_SHA}"
+          fi
+          git merge-base --is-ancestor 04760112deb81a8d145226fe7ee02923107c9916 HEAD
+
+      - name: Check out exact connected Rigging donor
+        uses: actions/checkout@v4
+        with:
+          repository: mike-axiom-mir/axm-animal-design
+          ref: f4614ab2f691cd5c5d12b88fabc38ef848acd24e
+          path: connected-donor
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Preserve receiving repository gates
+        working-directory: animal
+        run: |
+          python -m compileall -q src tests tools
+          python -m unittest discover -s tests -v
+
+      - name: Reject wrong connected Rigging donor identity
+        if: matrix.python-version == '3.11'
+        working-directory: animal
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf evidence/negative-connected-animation-rebind
+          if python tools/build_connected_animation_rebind_evidence.py \
+            --source examples/quadruped_neutral_001.json \
+            --rig-plan examples/quadruped_rig_probe_001.json \
+            --clip examples/quadruped_articulation_loop_001.json \
+            --connected-donor-root ../connected-donor \
+            --connected-donor-head 0000000000000000000000000000000000000000 \
+            --out evidence/negative-connected-animation-rebind; then
+            echo "wrong connected Rigging donor unexpectedly passed"
+            exit 1
+          fi
+          rm -rf evidence/negative-connected-animation-rebind
+
+      - name: Build exact connected 41-sample Animation evidence
+        if: matrix.python-version == '3.11'
+        working-directory: animal
+        run: |
+          set -euo pipefail
+          rm -rf evidence/animation-connected-forelimb-motion-001
+          python tools/build_connected_animation_rebind_evidence.py \
+            --source examples/quadruped_neutral_001.json \
+            --rig-plan examples/quadruped_rig_probe_001.json \
+            --clip examples/quadruped_articulation_loop_001.json \
+            --connected-donor-root ../connected-donor \
+            --connected-donor-head f4614ab2f691cd5c5d12b88fabc38ef848acd24e \
+            --out evidence/animation-connected-forelimb-motion-001
+          printf '%s\n' "$EXACT_HEAD_SHA" > evidence/animation-connected-forelimb-motion-001/exact-head.txt
+          printf '%s\n' 'f4614ab2f691cd5c5d12b88fabc38ef848acd24e' > evidence/animation-connected-forelimb-motion-001/connected-rigging-donor-head.txt
+          printf '%s\n' '04760112deb81a8d145226fe7ee02923107c9916' > evidence/animation-connected-forelimb-motion-001/rig-plan-authority-head.txt
+
+      - name: Validate retained receipt and exact identities
+        if: matrix.python-version == '3.11'
+        working-directory: animal
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          root = Path('evidence/animation-connected-forelimb-motion-001')
+          receipt = json.loads((root / 'connected_forelimb_motion_receipt.json').read_text())
+          frames = json.loads((root / 'connected_forelimb_motion_frames.json').read_text())
+          exact_head = os.environ['EXACT_HEAD_SHA']
+
+          assert receipt['gate'] == 'PASS_EXACT_CONNECTED_FORELIMB_41_SAMPLE_MOTION_REBIND', receipt
+          assert receipt['connected_rigging_donor']['git_head'] == 'f4614ab2f691cd5c5d12b88fabc38ef848acd24e', receipt
+          assert receipt['source_identity']['rig_plan_digest'] == 'b1f39ef8cd127edf9288b89ebd1f1fc14e6a3ceb8b0db58fa0ba9b12bc892aa8', receipt
+          assert receipt['source_identity']['clip_digest'] == '407903cbc5fe8803fc6a749e128b7736ebf139b414e61f77d9bbd32fc46f427b', receipt
+          assert receipt['connected_rigging_donor']['candidate_digest'] == '6e620ce4b1d810b259011d0d22d38ba7c7eea0e2500177df2bf28e08fe1caf6c', receipt
+          assert receipt['animation']['endpoint_inclusive_sample_count'] == 41, receipt
+          assert receipt['animation']['sample_rate_hz'] == 40, receipt
+          assert receipt['animation']['duration_seconds'] == 1.0, receipt
+          assert receipt['animation']['retimed'] is False, receipt
+          assert receipt['animation']['retargeted'] is False, receipt
+          assert receipt['animation']['weighting_changed'] is False, receipt
+          assert receipt['metrics']['all_41_samples_structurally_pass'] is True, receipt
+          assert receipt['metrics']['exact_neutral_return'] is True, receipt
+          assert receipt['metrics']['samples_with_collapse'] == 0, receipt
+          assert receipt['metrics']['samples_with_self_intersection'] == 0, receipt
+          assert len(frames['frames']) == 41, frames
+          assert (root / 'exact-head.txt').read_text().strip() == exact_head
+          print(json.dumps(receipt, indent=2))
+          PY
+
+      - name: Upload exact connected Animation evidence
+        if: ${{ always() && matrix.python-version == '3.11' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: quadruped-connected-forelimb-motion-${{ env.EXACT_HEAD_SHA }}
+          path: animal/evidence/animation-connected-forelimb-motion-001
+          if-no-files-found: error
+          retention-days: 30

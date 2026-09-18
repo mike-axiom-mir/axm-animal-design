@@ -1,0 +1,230 @@
+name: Animation Runtime key-budget rebind evidence
+
+on:
+  push:
+    branches:
+      - studio/animation-quadruped-articulation-loop-001
+    paths:
+      - "tools/build_animation_runtime_key_budget_rebind_payload.py"
+      - "tools/godot_animation_runtime_key_budget_rebind/**"
+      - ".github/workflows/animation-runtime-key-budget-rebind-evidence.yml"
+  pull_request:
+    paths:
+      - "tools/build_animation_runtime_key_budget_rebind_payload.py"
+      - "tools/godot_animation_runtime_key_budget_rebind/**"
+      - ".github/workflows/animation-runtime-key-budget-rebind-evidence.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  animation-runtime-key-budget-rebind:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Check out exact Animation head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+
+      - name: Bind exact head
+        shell: bash
+        run: |
+          set -euo pipefail
+          EXACT_HEAD_SHA="$(git rev-parse HEAD)"
+          echo "EXACT_HEAD_SHA=${EXACT_HEAD_SHA}" >> "$GITHUB_ENV"
+          if [ -n "${{ github.event.pull_request.head.sha }}" ]; then
+            test "$EXACT_HEAD_SHA" = "${{ github.event.pull_request.head.sha }}"
+          else
+            test "$EXACT_HEAD_SHA" = "$GITHUB_SHA"
+          fi
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Preserve inherited Animal tests
+        run: |
+          set -euo pipefail
+          python -m compileall -q src tests tools
+          python -m unittest discover -s tests -v
+
+      - name: Download exact Runtime and Rigging evidence
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          root=/tmp/animation-runtime-key-budget
+          mkdir -p "$root/runtime" "$root/rigging"
+
+          curl -fL \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/actions/artifacts/10525970648/zip" \
+            -o "$root/runtime.zip"
+          echo "ad071f58796b606d707168af9619d988a497ba1a745dda8ac62b42e7f814b996  $root/runtime.zip" | sha256sum -c -
+          unzip -q "$root/runtime.zip" -d "$root/runtime"
+
+          curl -fL \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/actions/artifacts/10544932693/zip" \
+            -o "$root/rigging.zip"
+          echo "36b870c7a3fd4c609fd4a1af2d03e444e8004422541a5809607650a45547f485  $root/rigging.zip" | sha256sum -c -
+          unzip -q "$root/rigging.zip" -d "$root/rigging"
+
+          CONTROL_GLB="$root/runtime/control.glb"
+          CANDIDATE_GLB="$root/runtime/candidate.glb"
+          test -f "$CONTROL_GLB"
+          test -f "$CANDIDATE_GLB"
+          echo "81c5422f8cf13ca65a253d3b05ebcf88fc0b20601dfb466b3c92f0d5e28dafcb  $CONTROL_GLB" | sha256sum -c -
+          echo "a8a32b58ad3bad44176a676b00f5cf1c20d1a2ec6da275b683d8f73a69088d6b  $CANDIDATE_GLB" | sha256sum -c -
+          echo "CONTROL_GLB=$CONTROL_GLB" >> "$GITHUB_ENV"
+          echo "CANDIDATE_GLB=$CANDIDATE_GLB" >> "$GITHUB_ENV"
+
+          mkdir -p evidence/animation_runtime_key_budget_rebind_001
+          printf '%s\n' "13ba20d198d2b7c5e428167745d59927b3084004" > evidence/animation_runtime_key_budget_rebind_001/runtime-head.txt
+          printf '%s\n' "ad071f58796b606d707168af9619d988a497ba1a745dda8ac62b42e7f814b996" > evidence/animation_runtime_key_budget_rebind_001/runtime-artifact-sha256.txt
+          printf '%s\n' "0bdddceb1ccac52732d0a2c71e877a8f31976305" > evidence/animation_runtime_key_budget_rebind_001/rigging-head.txt
+          printf '%s\n' "36b870c7a3fd4c609fd4a1af2d03e444e8004422541a5809607650a45547f485" > evidence/animation_runtime_key_budget_rebind_001/rigging-artifact-sha256.txt
+          printf '%s\n' "$EXACT_HEAD_SHA" > evidence/animation_runtime_key_budget_rebind_001/animation-head.txt
+
+      - name: Build exact independent dual-representation reference
+        run: |
+          set -euo pipefail
+          generated=tools/godot_animation_runtime_key_budget_rebind/generated
+          rm -rf "$generated"
+          mkdir -p "$generated"
+          python tools/build_animation_runtime_key_budget_rebind_payload.py \
+            --control-glb "$CONTROL_GLB" \
+            --candidate-glb "$CANDIDATE_GLB" \
+            --current-animation-head "$EXACT_HEAD_SHA" \
+            --out "$generated/payload.json"
+          cp "$generated/payload.json" evidence/animation_runtime_key_budget_rebind_001/payload.json
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          p = json.loads(Path('tools/godot_animation_runtime_key_budget_rebind/generated/payload.json').read_text())
+          assert p['state'] == 'HOLD_RUNTIME_19_KEY_ANIMATION_REBIND__REFERENCE_BUILT__OWNER_ANGLE_SEMANTICS_UNRESOLVED', p
+          assert p['current_animation_head'] == os.environ['EXACT_HEAD_SHA'], p
+          src = p['source_identity']
+          assert src['control_keys'] == 41 and src['candidate_keys'] == 19, src
+          assert src['motion_retimed'] is False and src['source_authored_keys_modified'] is False, src
+          sem = p['metric_semantics']
+          assert sem['worst_sample_index'] == 152, sem
+          assert sem['runtime_metric_below_declared_tolerance'] is True, sem
+          assert sem['physical_rotation_above_same_numeric_tolerance'] is True, sem
+          assert sem['animation_representation_adopted'] is False, sem
+          assert sem['owner_angle_semantics_resolved'] is False, sem
+          assert abs(sem['runtime_metric_max_deg'] - 0.05472043982868231) <= 1e-10, sem
+          assert abs(sem['physical_relative_rotation_max_deg'] - 0.10944087965736671) <= 2e-10, sem
+          assert len(p['dense_reference']['samples']) == 321, p['dense_reference']
+          PY
+
+      - name: Exercise fail-closed candidate identity control
+        run: |
+          set -euo pipefail
+          cp "$CANDIDATE_GLB" /tmp/animation-runtime-key-budget/mutated-candidate.glb
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('/tmp/animation-runtime-key-budget/mutated-candidate.glb')
+          b = bytearray(p.read_bytes())
+          b[-1] ^= 1
+          p.write_bytes(b)
+          PY
+          if python tools/build_animation_runtime_key_budget_rebind_payload.py \
+            --control-glb "$CONTROL_GLB" \
+            --candidate-glb /tmp/animation-runtime-key-budget/mutated-candidate.glb \
+            --current-animation-head "$EXACT_HEAD_SHA" \
+            --out /tmp/animation-runtime-key-budget/negative.json; then
+            echo "candidate identity mutation unexpectedly passed" >&2
+            exit 1
+          fi
+
+      - name: Download pinned Godot 4.7.2
+        env:
+          GODOT_URL: https://github.com/godotengine/godot-builds/releases/download/4.7.2-stable/Godot_v4.7.2-stable_linux.x86_64.zip
+          GODOT_SHA256: cadd3204e728a35d3f13adb7fd0d7902636b79f6b95c40c265eb73b6c35329e4
+        run: |
+          set -euo pipefail
+          mkdir -p .godot-bin
+          curl --fail --location --retry 3 --retry-delay 2 "$GODOT_URL" --output .godot-bin/godot.zip
+          echo "$GODOT_SHA256  .godot-bin/godot.zip" | sha256sum --check --strict
+          unzip -q .godot-bin/godot.zip -d .godot-bin
+          chmod +x .godot-bin/Godot_v4.7.2-stable_linux.x86_64
+          .godot-bin/Godot_v4.7.2-stable_linux.x86_64 --version
+
+      - name: Install virtual display when needed
+        run: |
+          if ! command -v xvfb-run >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y xvfb
+          fi
+
+      - name: Exercise exact control and candidate through AnimationPlayer
+        run: |
+          set -euo pipefail
+          xvfb-run --auto-servernum --server-args="-screen 0 640x480x24" \
+            .godot-bin/Godot_v4.7.2-stable_linux.x86_64 \
+            --display-driver x11 \
+            --rendering-method gl_compatibility \
+            --path tools/godot_animation_runtime_key_budget_rebind \
+            --script observe.gd
+          cp tools/godot_animation_runtime_key_budget_rebind/generated/godot_receipt.json evidence/animation_runtime_key_budget_rebind_001/godot_receipt.json
+
+      - name: Validate scoped HOLD/PASS receipt
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          root = Path('tools/godot_animation_runtime_key_budget_rebind/generated')
+          payload = json.loads((root / 'payload.json').read_text())
+          receipt = json.loads((root / 'godot_receipt.json').read_text())
+          expected = 'HOLD_RUNTIME_19_KEY_ANIMATION_REBIND__GODOT_LINEAR_PLAYBACK_EQUIVALENCE_PASS__OWNER_ANGLE_SEMANTICS_UNRESOLVED'
+          assert receipt['state'] == expected, receipt
+          assert receipt['promotion_effect'] == 'NONE', receipt
+          assert receipt['runtime_representation_adopted'] is False, receipt
+          assert receipt['runtime_controller_acceptance'] is False, receipt
+          assert receipt['gameplay_acceptance'] is False, receipt
+          obs = receipt['dense_observation']
+          assert obs['sample_count'] == 321, obs
+          assert obs['observed_worst_sample_index'] == 152, obs
+          assert obs['runtime_half_angle_below_nominal_tolerance'] is True, obs
+          assert obs['physical_rotation_above_same_numeric_tolerance'] is True, obs
+          assert obs['maximum_control_host_reference_physical_deg'] <= 0.0025, obs
+          assert obs['maximum_candidate_host_reference_physical_deg'] <= 0.0025, obs
+          assert obs['maximum_pair_reference_residual_physical_deg'] <= 0.0025, obs
+          assert obs['maximum_observed_runtime_half_angle_metric_deg'] < 0.075, obs
+          assert obs['maximum_observed_physical_relative_rotation_deg'] > 0.075, obs
+          assert obs['wallclock_pacing_claimed'] is False and obs['renderer_delivery_claimed'] is False, obs
+          decision = receipt['decision']
+          assert decision['animation_source_clip_changed'] is False, decision
+          assert decision['animation_source_clip_retimed'] is False, decision
+          assert decision['runtime_19_key_representation_adopted_by_animation'] is False, decision
+          assert decision['owner_angle_semantics_resolved'] is False, decision
+          neg = receipt['negative_control']
+          assert neg['failed_closed'] is True and neg['physical_signal_deg'] >= neg['minimum_required_physical_signal_deg'], neg
+          assert neg['source_changed'] is False and neg['runtime_candidate_file_changed'] is False, neg
+          boundary = receipt['truth_boundary'].lower()
+          for phrase in ('wall-clock', 'controller', 'gameplay', 'target-device', 'art/qa', 'canon'):
+              assert phrase in boundary, (phrase, boundary)
+          sem = payload['metric_semantics']
+          assert sem['animation_representation_adopted'] is False and sem['owner_angle_semantics_resolved'] is False, sem
+          print(json.dumps(receipt, indent=2))
+          PY
+
+      - name: Upload exact Animation key-budget rebind evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: animal-animation-runtime-key-budget-rebind-${{ env.EXACT_HEAD_SHA }}
+          path: |
+            evidence/animation_runtime_key_budget_rebind_001
+            tools/godot_animation_runtime_key_budget_rebind/generated/payload.json
+            tools/godot_animation_runtime_key_budget_rebind/generated/godot_receipt.json
+          if-no-files-found: warn
+          retention-days: 30

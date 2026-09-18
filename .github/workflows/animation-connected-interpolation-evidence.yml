@@ -1,0 +1,243 @@
+name: Animation connected interpolation evidence
+
+on:
+  push:
+    branches:
+      - studio/animation-quadruped-articulation-loop-001
+    paths:
+      - "tools/build_connected_animation_rebind_evidence.py"
+      - "tools/build_connected_animation_interpolation_godot.py"
+      - "tools/godot_animation_interpolation/**"
+      - "examples/quadruped_neutral_001.json"
+      - "examples/quadruped_rig_probe_001.json"
+      - "examples/quadruped_articulation_loop_001.json"
+      - ".github/workflows/animation-connected-interpolation-evidence.yml"
+  pull_request:
+    paths:
+      - "tools/build_connected_animation_rebind_evidence.py"
+      - "tools/build_connected_animation_interpolation_godot.py"
+      - "tools/godot_animation_interpolation/**"
+      - "examples/quadruped_neutral_001.json"
+      - "examples/quadruped_rig_probe_001.json"
+      - "examples/quadruped_articulation_loop_001.json"
+      - ".github/workflows/animation-connected-interpolation-evidence.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  connected-interpolation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out exact Animation lane head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+          path: animal
+
+      - name: Bind proof to exact successor head
+        working-directory: animal
+        shell: bash
+        run: |
+          set -euo pipefail
+          EXACT_HEAD_SHA="$(git rev-parse HEAD)"
+          echo "EXACT_HEAD_SHA=${EXACT_HEAD_SHA}" >> "$GITHUB_ENV"
+          if [ -n "${{ github.event.pull_request.head.sha }}" ]; then
+            test "${EXACT_HEAD_SHA}" = "${{ github.event.pull_request.head.sha }}"
+          else
+            test "${EXACT_HEAD_SHA}" = "${GITHUB_SHA}"
+          fi
+          git merge-base --is-ancestor cf87383bde4d84ea535c4aed8b6193652e1d57bc HEAD
+
+      - name: Check out exact connected Rigging donor
+        uses: actions/checkout@v4
+        with:
+          repository: mike-axiom-mir/axm-animal-design
+          ref: f4614ab2f691cd5c5d12b88fabc38ef848acd24e
+          path: connected-donor
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Preserve receiving repository gates
+        working-directory: animal
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m compileall -q src tests tools
+          python -m unittest discover -s tests -v
+
+      - name: Rebuild exact connected 41-sample prerequisite
+        working-directory: animal
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf evidence/animation-connected-forelimb-motion-001
+          python tools/build_connected_animation_rebind_evidence.py \
+            --source examples/quadruped_neutral_001.json \
+            --rig-plan examples/quadruped_rig_probe_001.json \
+            --clip examples/quadruped_articulation_loop_001.json \
+            --connected-donor-root ../connected-donor \
+            --connected-donor-head f4614ab2f691cd5c5d12b88fabc38ef848acd24e \
+            --out evidence/animation-connected-forelimb-motion-001
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          root = Path('evidence/animation-connected-forelimb-motion-001')
+          receipt = json.loads((root / 'connected_forelimb_motion_receipt.json').read_text())
+          frames = json.loads((root / 'connected_forelimb_motion_frames.json').read_text())
+          assert receipt['gate'] == 'PASS_EXACT_CONNECTED_FORELIMB_41_SAMPLE_MOTION_REBIND', receipt
+          assert receipt['source_identity']['rig_weighting_profile'] == 'smoothstep-v0', receipt
+          assert receipt['connected_rigging_donor']['git_head'] == 'f4614ab2f691cd5c5d12b88fabc38ef848acd24e', receipt
+          assert receipt['connected_rigging_donor']['candidate_digest'] == '6e620ce4b1d810b259011d0d22d38ba7c7eea0e2500177df2bf28e08fe1caf6c', receipt
+          assert len(frames['frames']) == 41, frames
+          assert len(frames['indices']) == 240, frames
+          PY
+
+      - name: Build exact connected piecewise-linear interpolation payload
+        working-directory: animal
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf tools/godot_animation_interpolation/generated
+          python tools/build_connected_animation_interpolation_godot.py
+          python - <<'PY'
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+          root = Path('tools/godot_animation_interpolation/generated')
+          payload_path = root / 'quadruped_animation_interpolation_payload.json'
+          summary = json.loads((root / 'quadruped_animation_interpolation_summary.json').read_text())
+          payload = json.loads(payload_path.read_text())
+          exact_head = os.environ['EXACT_HEAD_SHA']
+          assert summary['gate'] == 'PASS_CONNECTED_PIECEWISE_LINEAR_C0_INTERPOLATION_PAYLOAD', summary
+          assert summary['payload_sha256'] == hashlib.sha256(payload_path.read_bytes()).hexdigest(), summary
+          assert payload['receiving_repository']['git_head'] == exact_head, payload
+          contract = payload['interpolation_contract']
+          assert contract['continuity_class_claimed'] == 'C0_POSITION_ONLY', contract
+          assert contract['authored_interval_count'] == 40, contract
+          assert contract['subdivisions_per_authored_interval'] == 4, contract
+          assert contract['interior_probe_alphas'] == [0.25, 0.5, 0.75], contract
+          assert contract['probe_frame_count_including_final_endpoint'] == 161, contract
+          assert len(payload['frames']) == 161, len(payload['frames'])
+          metrics = payload['continuity_metrics']
+          assert metrics['maximum_authored_boundary_residual_m'] <= 1e-12, metrics
+          assert metrics['maximum_piecewise_join_residual_m'] <= 1e-12, metrics
+          assert metrics['interior_endpoint_collapse_failures'] == 0, metrics
+          assert metrics['maximum_probe_to_authored_step_ratio'] <= 0.2500000001, metrics
+          assert payload['topology']['candidate_digest'] == '6e620ce4b1d810b259011d0d22d38ba7c7eea0e2500177df2bf28e08fe1caf6c', payload
+          assert payload['source_identity']['connected_rigging_donor_head'] == 'f4614ab2f691cd5c5d12b88fabc38ef848acd24e', payload
+          print(json.dumps(summary, indent=2))
+          PY
+
+      - name: Download pinned Godot 4.7.2
+        env:
+          GODOT_URL: https://github.com/godotengine/godot-builds/releases/download/4.7.2-stable/Godot_v4.7.2-stable_linux.x86_64.zip
+          GODOT_SHA256: cadd3204e728a35d3f13adb7fd0d7902636b79f6b95c40c265eb73b6c35329e4
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .godot-bin
+          curl --fail --location --retry 3 --retry-delay 2 "$GODOT_URL" --output .godot-bin/godot.zip
+          echo "$GODOT_SHA256  .godot-bin/godot.zip" | sha256sum --check --strict
+          unzip -q .godot-bin/godot.zip -d .godot-bin
+          chmod +x .godot-bin/Godot_v4.7.2-stable_linux.x86_64
+          .godot-bin/Godot_v4.7.2-stable_linux.x86_64 --version
+
+      - name: Install virtual display when needed
+        shell: bash
+        run: |
+          if ! command -v xvfb-run >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y xvfb
+          fi
+
+      - name: Exercise all connected interpolation probes in Godot
+        shell: bash
+        run: |
+          set -euo pipefail
+          xvfb-run --auto-servernum --server-args="-screen 0 800x600x24" \
+            .godot-bin/Godot_v4.7.2-stable_linux.x86_64 \
+            --display-driver x11 \
+            --rendering-method gl_compatibility \
+            --path animal/tools/godot_animation_interpolation \
+            --script observe.gd
+
+      - name: Validate exact connected interpolation target-host boundary
+        working-directory: animal
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+          root = Path('tools/godot_animation_interpolation/generated')
+          payload_path = root / 'quadruped_animation_interpolation_payload.json'
+          summary = json.loads((root / 'quadruped_animation_interpolation_summary.json').read_text())
+          receipt = json.loads((root / 'quadruped_animation_interpolation_godot_receipt.json').read_text())
+          exact_head = os.environ['EXACT_HEAD_SHA']
+          assert receipt['state'] == 'PASS_GODOT_CONNECTED_C0_INTERPOLATION_PROBE_HOST', receipt
+          assert receipt['promotion_effect'] == 'NONE', receipt
+          assert summary['receiving_repository']['git_head'] == exact_head, summary
+          assert receipt['payload_sha256'] == hashlib.sha256(payload_path.read_bytes()).hexdigest(), receipt
+          assert receipt['payload_sha256'] == summary['payload_sha256'], (receipt, summary)
+          assert receipt['source_identity'] == summary['source_identity'], (receipt, summary)
+          assert receipt['interpolation_contract']['continuity_class_claimed'] == 'C0_POSITION_ONLY', receipt
+          assert receipt['topology']['candidate_digest'] == '6e620ce4b1d810b259011d0d22d38ba7c7eea0e2500177df2bf28e08fe1caf6c', receipt
+          app = receipt['engine_interpolation_application']
+          assert app['applied_probe_steps'] == 321, app
+          assert app['display_cycle_probe_count'] == 160, app
+          assert app['cycles_exercised'] == 2, app
+          assert app['interior_probe_steps_per_cycle'] == 120, app
+          assert app['sequence_order_ok'] is True, app
+          assert app['godot_applied_between_sample_positions'] is True, app
+          assert app['readback_matches_payload'] is True, app
+          assert app['maximum_vertex_readback_error_m'] <= 1e-6, app
+          assert app['real_time_frame_pacing_claimed'] is False, app
+          assert app['animation_player_or_skeleton_interpolation_claimed'] is False, app
+          assert app['runtime_controller_claimed'] is False, app
+          visual = receipt['retained_visual_probes']
+          assert visual['neutral_roundtrip_visually_clean'] is True, visual
+          assert visual['visual_quality_acceptance'] == 'NOT_CLAIMED', visual
+          boundary = receipt['truth_boundary'].lower()
+          assert 'controller' in boundary and 'gameplay' in boundary, boundary
+          assert 'c1' in boundary and 'wall-clock' in boundary, boundary
+          for name in (
+              'godot-neutral.png',
+              'godot-authored-19.png',
+              'godot-interior-19p5.png',
+              'godot-peak-20.png',
+              'godot-last-interior.png',
+              'godot-final-neutral.png',
+          ):
+              path = root / name
+              assert path.stat().st_size > 1000, (name, path.stat().st_size)
+          print(json.dumps(receipt, indent=2))
+          PY
+
+      - name: Upload exact connected interpolation evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: quadruped-connected-forelimb-c0-interpolation-${{ env.EXACT_HEAD_SHA }}
+          path: |
+            animal/tools/godot_animation_interpolation/generated/quadruped_animation_interpolation_payload.json
+            animal/tools/godot_animation_interpolation/generated/quadruped_animation_interpolation_summary.json
+            animal/tools/godot_animation_interpolation/generated/quadruped_animation_interpolation_godot_receipt.json
+            animal/tools/godot_animation_interpolation/generated/godot-neutral.png
+            animal/tools/godot_animation_interpolation/generated/godot-authored-19.png
+            animal/tools/godot_animation_interpolation/generated/godot-interior-19p5.png
+            animal/tools/godot_animation_interpolation/generated/godot-peak-20.png
+            animal/tools/godot_animation_interpolation/generated/godot-last-interior.png
+            animal/tools/godot_animation_interpolation/generated/godot-final-neutral.png
+            animal/evidence/animation-connected-forelimb-motion-001/connected_forelimb_motion_receipt.json
+            animal/evidence/animation-connected-forelimb-motion-001/connected_forelimb_motion_frames.json
+          if-no-files-found: warn
+          retention-days: 30

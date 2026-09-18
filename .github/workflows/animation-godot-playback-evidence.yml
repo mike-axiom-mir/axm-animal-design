@@ -1,0 +1,201 @@
+name: Animal Godot discrete playback evidence
+
+on:
+  push:
+    branches:
+      - studio/animation-quadruped-articulation-loop-001
+    paths:
+      - "src/axm_animal_design/animation_motion.py"
+      - "src/axm_animal_design/animation_playback.py"
+      - "src/axm_animal_design/animation_temporal.py"
+      - "src/axm_animal_design/rig_deformation.py"
+      - "examples/quadruped_neutral_001.json"
+      - "examples/quadruped_rig_probe_001.json"
+      - "examples/quadruped_articulation_loop_001.json"
+      - "tools/build_animation_godot_playback.py"
+      - "tools/godot_animation_playback/**"
+      - ".github/workflows/animation-godot-playback-evidence.yml"
+  pull_request:
+    paths:
+      - "src/axm_animal_design/animation_motion.py"
+      - "src/axm_animal_design/animation_playback.py"
+      - "src/axm_animal_design/animation_temporal.py"
+      - "src/axm_animal_design/rig_deformation.py"
+      - "examples/quadruped_neutral_001.json"
+      - "examples/quadruped_rig_probe_001.json"
+      - "examples/quadruped_articulation_loop_001.json"
+      - "tools/build_animation_godot_playback.py"
+      - "tools/godot_animation_playback/**"
+      - ".github/workflows/animation-godot-playback-evidence.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  godot-discrete-playback-proof:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out exact Animal animation lane head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Bind proof to actual checked-out head
+        shell: bash
+        run: |
+          set -euo pipefail
+          EXACT_HEAD_SHA="$(git rev-parse HEAD)"
+          echo "EXACT_HEAD_SHA=${EXACT_HEAD_SHA}" >> "$GITHUB_ENV"
+          if [ -n "${{ github.event.pull_request.head.sha }}" ]; then
+            test "${EXACT_HEAD_SHA}" = "${{ github.event.pull_request.head.sha }}"
+          else
+            test "${EXACT_HEAD_SHA}" = "${GITHUB_SHA}"
+          fi
+          echo "exact Animal head: ${EXACT_HEAD_SHA}"
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Preserve existing repository gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m compileall -q src tests tools
+          python -m unittest discover -s tests -v
+          python tools/build_animation_playback.py
+
+      - name: Build exact authored-sample Godot payload
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf tools/godot_animation_playback/generated
+          python tools/build_animation_godot_playback.py
+          python - <<'PY'
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+
+          root = Path('tools/godot_animation_playback/generated')
+          payload_path = root / 'quadruped_animation_payload.json'
+          summary = json.loads((root / 'quadruped_animation_payload_summary.json').read_text())
+          payload = json.loads(payload_path.read_text())
+          digest = hashlib.sha256(payload_path.read_bytes()).hexdigest()
+          exact_head = os.environ['EXACT_HEAD_SHA']
+
+          assert summary['gate'] == 'PASS_GODOT_DISCRETE_PLAYBACK_PAYLOAD_BUILD', summary
+          assert digest == summary['payload_sha256'], (digest, summary)
+          assert payload['receiving_repository']['repository'] == 'mike-axiom-mir/axm-animal-design', payload
+          assert payload['receiving_repository']['git_head'] == exact_head, (payload, exact_head)
+          assert summary['receiving_repository'] == payload['receiving_repository'], (summary, payload)
+          assert payload['source_playback']['source_gate'] == 'PASS_DISCRETE_SAMPLED_PLAYBACK_SEAM', payload
+          assert payload['source_playback']['displayed_frame_count_per_cycle'] == 40, payload
+          assert payload['source_playback']['sample_rate_hz'] == 40, payload
+          assert payload['source_playback']['playback_mode'] == 'DISCRETE_AUTHORED_SAMPLES_NO_INTERPOLATION', payload
+          assert summary['unique_authored_surface_digests'] > 2, summary
+          assert payload['source_identity']['rig_weighting_profile'] == 'smoothstep-v0', payload
+          assert payload['source_identity']['motion_semantics'] == 'STYLIZED_ARTICULATION_PULSE_NOT_GAIT_OR_LOCOMOTION', payload
+          print(json.dumps(summary, indent=2))
+          PY
+
+      - name: Download pinned Godot 4.7.2
+        env:
+          GODOT_URL: https://github.com/godotengine/godot-builds/releases/download/4.7.2-stable/Godot_v4.7.2-stable_linux.x86_64.zip
+          GODOT_SHA256: cadd3204e728a35d3f13adb7fd0d7902636b79f6b95c40c265eb73b6c35329e4
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .godot-bin
+          curl --fail --location --retry 3 --retry-delay 2 "$GODOT_URL" --output .godot-bin/godot.zip
+          echo "$GODOT_SHA256  .godot-bin/godot.zip" | sha256sum --check --strict
+          unzip -q .godot-bin/godot.zip -d .godot-bin
+          chmod +x .godot-bin/Godot_v4.7.2-stable_linux.x86_64
+          .godot-bin/Godot_v4.7.2-stable_linux.x86_64 --version
+
+      - name: Install virtual display when needed
+        shell: bash
+        run: |
+          if ! command -v xvfb-run >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y xvfb
+          fi
+
+      - name: Exercise two exact authored-sample cycles in Godot
+        shell: bash
+        run: |
+          set -euo pipefail
+          xvfb-run --auto-servernum --server-args="-screen 0 800x600x24" \
+            .godot-bin/Godot_v4.7.2-stable_linux.x86_64 \
+            --display-driver x11 \
+            --rendering-method gl_compatibility \
+            --path tools/godot_animation_playback \
+            --script observe.gd
+
+      - name: Validate exact target-host motion boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+
+          root = Path('tools/godot_animation_playback/generated')
+          receipt = json.loads((root / 'quadruped_animation_godot_receipt.json').read_text())
+          summary = json.loads((root / 'quadruped_animation_payload_summary.json').read_text())
+          payload_path = root / 'quadruped_animation_payload.json'
+          exact_head = os.environ['EXACT_HEAD_SHA']
+
+          assert receipt['state'] == 'PASS_GODOT_DISCRETE_SAMPLE_PLAYBACK_PROOF_HOST', receipt
+          assert receipt['promotion_effect'] == 'NONE', receipt
+          assert summary['receiving_repository']['git_head'] == exact_head, (summary, exact_head)
+          assert receipt['payload_sha256'] == hashlib.sha256(payload_path.read_bytes()).hexdigest(), receipt
+          assert receipt['payload_sha256'] == summary['payload_sha256'], (receipt, summary)
+          assert receipt['source_identity'] == summary['source_identity'], (receipt, summary)
+          assert receipt['source_playback']['source_gate'] == 'PASS_DISCRETE_SAMPLED_PLAYBACK_SEAM', receipt
+
+          applied = receipt['engine_sample_application']
+          assert applied['applied_sample_steps'] == 81, applied
+          assert applied['cycles_exercised'] == 2, applied
+          assert applied['final_wrap_sample'] == 0, applied
+          assert applied['sequence_order_ok'] is True, applied
+          assert applied['unique_authored_surface_digests_seen'] == summary['unique_authored_surface_digests'], (applied, summary)
+          assert applied['readback_matches_payload'] is True, applied
+          assert applied['maximum_vertex_readback_error_m'] <= 1e-6, applied
+          assert applied['real_time_frame_pacing_claimed'] is False, applied
+          assert applied['interpolation_claimed'] is False, applied
+
+          visual = receipt['visual_observation']
+          assert visual['peak_visible'] is True, visual
+          assert visual['neutral_roundtrip_visually_clean'] is True, visual
+          assert visual['visual_quality_acceptance'] == 'NOT_CLAIMED', visual
+
+          boundary = receipt['truth_boundary'].lower()
+          assert 'controller' in boundary and 'gameplay' in boundary, boundary
+          assert 'real-time 40 hz' in boundary and 'interpolation' in boundary, boundary
+
+          for name in ('godot-neutral.png', 'godot-peak.png', 'godot-last-visible.png', 'godot-wrap-neutral.png'):
+              path = root / name
+              assert path.stat().st_size > 1000, (name, path.stat().st_size)
+
+          print(json.dumps(receipt, indent=2))
+          PY
+
+      - name: Upload retained Animal Godot playback evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: quadruped-articulation-loop-001-godot-playback-${{ env.EXACT_HEAD_SHA }}
+          path: |
+            tools/godot_animation_playback/generated/quadruped_animation_payload.json
+            tools/godot_animation_playback/generated/quadruped_animation_payload_summary.json
+            tools/godot_animation_playback/generated/quadruped_animation_godot_receipt.json
+            tools/godot_animation_playback/generated/godot-neutral.png
+            tools/godot_animation_playback/generated/godot-peak.png
+            tools/godot_animation_playback/generated/godot-last-visible.png
+            tools/godot_animation_playback/generated/godot-wrap-neutral.png
+          if-no-files-found: warn

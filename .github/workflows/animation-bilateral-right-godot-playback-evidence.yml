@@ -1,0 +1,301 @@
+name: Animation bilateral right Godot playback evidence
+
+on:
+  push:
+    branches:
+      - studio/animation-quadruped-articulation-loop-001
+    paths:
+      - "tools/build_bilateral_right_animation_godot_evidence.py"
+      - "tools/godot_animation_playback/**"
+      - "examples/quadruped_articulation_loop_001.json"
+      - ".github/workflows/animation-bilateral-right-godot-playback-evidence.yml"
+  pull_request:
+    paths:
+      - "tools/build_bilateral_right_animation_godot_evidence.py"
+      - "tools/godot_animation_playback/**"
+      - "examples/quadruped_articulation_loop_001.json"
+      - ".github/workflows/animation-bilateral-right-godot-playback-evidence.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  bilateral-right-motion-godot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Check out exact Animation lane head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+          path: animal
+
+      - name: Bind evidence to exact Animation lineage
+        working-directory: animal
+        shell: bash
+        run: |
+          set -euo pipefail
+          EXACT_HEAD_SHA="$(git rev-parse HEAD)"
+          echo "EXACT_HEAD_SHA=${EXACT_HEAD_SHA}" >> "$GITHUB_ENV"
+          if [ -n "${{ github.event.pull_request.head.sha }}" ]; then
+            test "${EXACT_HEAD_SHA}" = "${{ github.event.pull_request.head.sha }}"
+          else
+            test "${EXACT_HEAD_SHA}" = "${GITHUB_SHA}"
+          fi
+          git merge-base --is-ancestor 435a9f5ce725cf10e38a76c3fd9f643fe7fea8ed HEAD
+
+      - name: Check out exact bilateral Rigging donor
+        uses: actions/checkout@v4
+        with:
+          repository: mike-axiom-mir/axm-animal-design
+          ref: 94bc573e2e06ba7a35c9908c141e2f939d4739a8
+          path: bilateral-rigging
+
+      - name: Check out exact historical rig/profile donor
+        uses: actions/checkout@v4
+        with:
+          repository: mike-axiom-mir/axm-animal-design
+          ref: 04760112deb81a8d145226fe7ee02923107c9916
+          path: rig-donor
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Preserve receiving repository gates
+        working-directory: animal
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m compileall -q src tests tools
+          python -m unittest discover -s tests -v
+
+      - name: Reject wrong bilateral Rigging donor identity
+        working-directory: animal
+        shell: bash
+        run: |
+          set -euo pipefail
+          if python tools/build_bilateral_right_animation_godot_evidence.py \
+            --rigging-root ../bilateral-rigging \
+            --rig-donor-root ../rig-donor \
+            --rigging-head 0000000000000000000000000000000000000000 \
+            --clip examples/quadruped_articulation_loop_001.json \
+            --out evidence/negative-bilateral-right-motion \
+            --payload-dir /tmp/negative-bilateral-right-payload; then
+            echo "wrong bilateral Rigging donor identity unexpectedly passed"
+            exit 1
+          fi
+          rm -rf evidence/negative-bilateral-right-motion /tmp/negative-bilateral-right-payload
+
+      - name: Reject silent refined-weighting adoption
+        working-directory: animal
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          src = Path('examples/quadruped_articulation_loop_001.json')
+          dst = Path('/tmp/quadruped_articulation_loop_refined_weighting_right.json')
+          payload = json.loads(src.read_text())
+          payload['rig_weighting_profile'] = 'ease-out-power-0p75-v1'
+          dst.write_text(json.dumps(payload, indent=2, sort_keys=True) + '\n')
+          PY
+          if python tools/build_bilateral_right_animation_godot_evidence.py \
+            --rigging-root ../bilateral-rigging \
+            --rig-donor-root ../rig-donor \
+            --rigging-head 94bc573e2e06ba7a35c9908c141e2f939d4739a8 \
+            --clip /tmp/quadruped_articulation_loop_refined_weighting_right.json \
+            --out evidence/negative-bilateral-right-weighting \
+            --payload-dir /tmp/negative-bilateral-right-weighting-payload; then
+            echo "silent refined weighting adoption unexpectedly passed"
+            exit 1
+          fi
+          rm -rf evidence/negative-bilateral-right-weighting /tmp/negative-bilateral-right-weighting-payload
+
+      - name: Rebind unchanged clip to exact bilateral right deforming surface
+        working-directory: animal
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf evidence/animation-bilateral-right-motion-001 tools/godot_animation_playback/generated
+          python tools/build_bilateral_right_animation_godot_evidence.py \
+            --rigging-root ../bilateral-rigging \
+            --rig-donor-root ../rig-donor \
+            --rigging-head 94bc573e2e06ba7a35c9908c141e2f939d4739a8 \
+            --clip examples/quadruped_articulation_loop_001.json \
+            --out evidence/animation-bilateral-right-motion-001 \
+            --payload-dir tools/godot_animation_playback/generated
+          printf '%s\n' "$EXACT_HEAD_SHA" > evidence/animation-bilateral-right-motion-001/exact-head.txt
+          python - <<'PY'
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+          evidence = Path('evidence/animation-bilateral-right-motion-001')
+          generated = Path('tools/godot_animation_playback/generated')
+          receipt = json.loads((evidence / 'bilateral_right_motion_receipt.json').read_text())
+          frames = json.loads((evidence / 'bilateral_right_motion_frames.json').read_text())
+          payload_path = generated / 'quadruped_animation_payload.json'
+          payload = json.loads(payload_path.read_text())
+          summary = json.loads((generated / 'quadruped_animation_payload_summary.json').read_text())
+          assert receipt['gate'] == 'PASS_BILATERAL_RIGHT_41_SAMPLE_MOTION_REBIND__NEWER_TOPOLOGY_HELD', receipt
+          ident = receipt['source_identity']
+          assert ident['bilateral_rigging_head'] == '94bc573e2e06ba7a35c9908c141e2f939d4739a8', ident
+          assert ident['geometry_bilateral_head'] == 'f89af95d621c36da3994c6660552da8bbc73fd1b', ident
+          assert ident['right_successor_digest'] == '262f536e0e522fd3e102cb16464c3757985fbb1dfcb3001df3b1f27b623b0115', ident
+          assert ident['rig_weighting_profile'] == 'smoothstep-v0', ident
+          observed = receipt['observed']
+          assert observed['maximum_bilateral_mirrored_vertex_residual_m'] <= 1e-10, observed
+          assert observed['maximum_right_collapsed_triangles'] == 0, observed
+          assert observed['maximum_right_nonadjacent_self_intersection_pairs'] == 0, observed
+          assert observed['exact_right_neutral_start_return'] is True, observed
+          boundary = receipt['dependency_boundary']
+          assert boundary['newer_geometry_successor_known'] == 'bdbb51303bd1b96866b06a71730ccc328bf4f2f6', boundary
+          assert boundary['newer_geometry_successor_consumed'] is False, boundary
+          assert len(frames['frames']) == 41, frames
+          assert frames['frames'][0]['positions'] == frames['frames'][40]['positions'], frames
+          assert summary['gate'] == 'PASS_BILATERAL_RIGHT_GODOT_PAYLOAD_BUILD', summary
+          assert summary['payload_sha256'] == hashlib.sha256(payload_path.read_bytes()).hexdigest(), summary
+          assert summary['unique_authored_surface_digests'] > 2, summary
+          assert payload['source_playback']['source_gate'] == receipt['gate'], payload
+          assert payload['topology']['candidate_digest'] == ident['right_successor_digest'], payload
+          assert payload['topology']['newer_geometry_successor_consumed'] is False, payload
+          assert Path(evidence / 'exact-head.txt').read_text().strip() == os.environ['EXACT_HEAD_SHA']
+          print(json.dumps(receipt, indent=2))
+          PY
+
+      - name: Download pinned Godot 4.7.2
+        env:
+          GODOT_URL: https://github.com/godotengine/godot-builds/releases/download/4.7.2-stable/Godot_v4.7.2-stable_linux.x86_64.zip
+          GODOT_SHA256: cadd3204e728a35d3f13adb7fd0d7902636b79f6b95c40c265eb73b6c35329e4
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .godot-bin
+          curl --fail --location --retry 3 --retry-delay 2 "$GODOT_URL" --output .godot-bin/godot.zip
+          echo "$GODOT_SHA256  .godot-bin/godot.zip" | sha256sum --check --strict
+          unzip -q .godot-bin/godot.zip -d .godot-bin
+          chmod +x .godot-bin/Godot_v4.7.2-stable_linux.x86_64
+          .godot-bin/Godot_v4.7.2-stable_linux.x86_64 --version
+
+      - name: Install virtual display when needed
+        shell: bash
+        run: |
+          if ! command -v xvfb-run >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y xvfb
+          fi
+
+      - name: Exercise exact right-surface samples in Godot
+        shell: bash
+        run: |
+          set -euo pipefail
+          xvfb-run --auto-servernum --server-args="-screen 0 800x600x24" \
+            .godot-bin/Godot_v4.7.2-stable_linux.x86_64 \
+            --display-driver x11 \
+            --rendering-method gl_compatibility \
+            --path animal/tools/godot_animation_playback \
+            --script observe.gd
+
+      - name: Validate right-surface target-host boundary
+        working-directory: animal
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import hashlib
+          import json
+          from pathlib import Path
+          evidence = Path('evidence/animation-bilateral-right-motion-001')
+          generated = Path('tools/godot_animation_playback/generated')
+          animation = json.loads((evidence / 'bilateral_right_motion_receipt.json').read_text())
+          payload_path = generated / 'quadruped_animation_payload.json'
+          summary = json.loads((generated / 'quadruped_animation_payload_summary.json').read_text())
+          receipt = json.loads((generated / 'quadruped_animation_godot_receipt.json').read_text())
+          assert receipt['state'] == 'PASS_GODOT_DISCRETE_SAMPLE_PLAYBACK_PROOF_HOST', receipt
+          assert receipt['promotion_effect'] == 'NONE', receipt
+          assert receipt['payload_sha256'] == hashlib.sha256(payload_path.read_bytes()).hexdigest(), receipt
+          assert receipt['payload_sha256'] == summary['payload_sha256'], (receipt, summary)
+          assert receipt['source_playback']['source_gate'] == animation['gate'], receipt
+          assert receipt['topology']['candidate_digest'] == animation['source_identity']['right_successor_digest'], receipt
+          applied = receipt['engine_sample_application']
+          assert applied['applied_sample_steps'] == 81, applied
+          assert applied['cycles_exercised'] == 2, applied
+          assert applied['final_wrap_sample'] == 0, applied
+          assert applied['sequence_order_ok'] is True, applied
+          assert applied['readback_matches_payload'] is True, applied
+          assert applied['maximum_vertex_readback_error_m'] <= 1e-6, applied
+          assert applied['real_time_frame_pacing_claimed'] is False, applied
+          assert applied['interpolation_claimed'] is False, applied
+          visual = receipt['visual_observation']
+          assert visual['peak_visible'] is True, visual
+          assert visual['neutral_roundtrip_visually_clean'] is True, visual
+          assert visual['visual_quality_acceptance'] == 'NOT_CLAIMED', visual
+          for name in ('godot-neutral.png', 'godot-peak.png', 'godot-last-visible.png', 'godot-wrap-neutral.png'):
+              assert generated.joinpath(name).stat().st_size > 1000, name
+          print(json.dumps(receipt, indent=2))
+          PY
+
+      - name: Upload exact bilateral right Animation evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: quadruped-bilateral-right-animation-godot-${{ env.EXACT_HEAD_SHA }}
+          path: |
+            animal/evidence/animation-bilateral-right-motion-001/bilateral_right_motion_receipt.json
+            animal/evidence/animation-bilateral-right-motion-001/bilateral_right_motion_frames.json
+            animal/evidence/animation-bilateral-right-motion-001/exact-head.txt
+            animal/tools/godot_animation_playback/generated/quadruped_animation_payload.json
+            animal/tools/godot_animation_playback/generated/quadruped_animation_payload_summary.json
+            animal/tools/godot_animation_playback/generated/quadruped_animation_godot_receipt.json
+            animal/tools/godot_animation_playback/generated/godot-neutral.png
+            animal/tools/godot_animation_playback/generated/godot-peak.png
+            animal/tools/godot_animation_playback/generated/godot-last-visible.png
+            animal/tools/godot_animation_playback/generated/godot-wrap-neutral.png
+          if-no-files-found: error
+          retention-days: 30
+
+  python-313-compatibility:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out exact Animation lane head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          path: animal
+      - name: Check out exact bilateral Rigging donor
+        uses: actions/checkout@v4
+        with:
+          repository: mike-axiom-mir/axm-animal-design
+          ref: 94bc573e2e06ba7a35c9908c141e2f939d4739a8
+          path: bilateral-rigging
+      - name: Check out exact historical rig/profile donor
+        uses: actions/checkout@v4
+        with:
+          repository: mike-axiom-mir/axm-animal-design
+          ref: 04760112deb81a8d145226fe7ee02923107c9916
+          path: rig-donor
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Compile and preserve full inherited Animal tests
+        working-directory: animal
+        run: |
+          python -m compileall -q src tests tools
+          python -m unittest discover -s tests -v
+      - name: Rebuild exact bilateral right structural Animation evidence
+        working-directory: animal
+        run: |
+          rm -rf evidence/animation-bilateral-right-motion-001 tools/godot_animation_playback/generated
+          python tools/build_bilateral_right_animation_godot_evidence.py \
+            --rigging-root ../bilateral-rigging \
+            --rig-donor-root ../rig-donor \
+            --rigging-head 94bc573e2e06ba7a35c9908c141e2f939d4739a8 \
+            --clip examples/quadruped_articulation_loop_001.json \
+            --out evidence/animation-bilateral-right-motion-001 \
+            --payload-dir tools/godot_animation_playback/generated
+          grep -q 'PASS_BILATERAL_RIGHT_41_SAMPLE_MOTION_REBIND__NEWER_TOPOLOGY_HELD' evidence/animation-bilateral-right-motion-001/bilateral_right_motion_receipt.json

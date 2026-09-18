@@ -1,0 +1,22 @@
+{
+  "schema": "axm.animal-animation-motion-clip/v0.1",
+  "name": "quadruped-articulation-loop-001",
+  "source_name": "quadruped-neutral-001",
+  "rig_plan_name": "quadruped-neutral-001-rig-probe",
+  "rig_weighting_profile": "smoothstep-v0",
+  "motion_semantics": "STYLIZED_ARTICULATION_PULSE_NOT_GAIT_OR_LOCOMOTION",
+  "duration_seconds": 1.0,
+  "sample_rate_hz": 40,
+  "curve": "raised-cosine-neutral-to-peak-to-neutral",
+  "tracks": [
+    {"joint_id": "front-elbow-L", "peak_angle_deg": 18.0},
+    {"joint_id": "front-elbow-R", "peak_angle_deg": 18.0},
+    {"joint_id": "hind-knee-L", "peak_angle_deg": 14.0},
+    {"joint_id": "hind-knee-R", "peak_angle_deg": 14.0}
+  ],
+  "retained_keyframe_times_seconds": [0.0, 0.25, 0.5, 0.75, 1.0],
+  "truth": {
+    "proves_if_green": "This exact source and repaired rig, using the existing smoothstep-v0 weighting baseline, can be sampled continuously through one bounded loop with exact neutral return, finite non-collapsed geometry, retained downstream paw propagation, and deterministic motion evidence.",
+    "does_not_prove": "Biological gait, locomotion, foot planting, root motion, balance, animation quality, acceptance of the separate ease-out weighting candidate, production skinning, self-intersection freedom, target-engine playback, runtime-controller integration, gameplay acceptance, performance, or mastery."
+  }
+}
